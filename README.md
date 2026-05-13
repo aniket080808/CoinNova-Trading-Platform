@@ -1,6 +1,6 @@
 # 🚀 CoinNova - Advanced Cryptocurrency Trading Platform
 
-![CoinNova Banner](https://images.unsplash.com/photo-1621761191319-c6fb62004040?q=80&w=2000&auto=format&fit=crop)
+
 
 CoinNova is a state-of-the-art, full-stack cryptocurrency trading and management platform. It offers real-time market tracking, secure trading simulations, AI-driven insights, and a seamless financial management experience.
 
