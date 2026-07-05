@@ -22,7 +22,7 @@ import { startCronJobs } from "./services/cron.js";
 startCronJobs();
 
 const app = express();
-app.set("trust proxy", true);
+app.set("trust proxy", 1);
 
 // ─── Global middleware ───────────────────────────────────
 
@@ -33,10 +33,7 @@ const isAllowedOrigin = (origin?: string) => {
 
   const normalizedOrigin = origin.replace(/\/$/, "");
   if (allowedOrigins.has(normalizedOrigin)) return true;
-  if (/^https?:\/\/localhost(?::\d+)?$/i.test(normalizedOrigin)) return true;
-  if (/^https?:\/\/127\.0\.0\.1(?::\d+)?$/i.test(normalizedOrigin)) return true;
-  if (/^https:\/\/[^/]+\.netlify\.app$/i.test(normalizedOrigin)) return true;
-  if (/^https:\/\/[^/]+\.onrender\.com$/i.test(normalizedOrigin)) return true;
+  if (normalizedOrigin === "https://coinnova-trading.netlify.app") return true;
 
   return false;
 };
