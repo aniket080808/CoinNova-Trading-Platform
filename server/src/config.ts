@@ -19,12 +19,17 @@ function optionalEnv(key: string, fallback = ""): string {
 }
 
 const smtpUser = optionalEnv("SMTP_USER");
+const corsOrigins = optionalEnv(
+  "CORS_ORIGIN",
+  "https://coinnova.io,https://coinnova-trading-platform.netlify.app,http://localhost:8080"
+)
+  .split(",")
+  .map((value) => value.trim())
+  .filter(Boolean);
 
 export const config = {
   port: Number(env("PORT", "3001")),
-  corsOrigin: process.env.NODE_ENV === "production" 
-    ? ["https://coinnova.io"] // Replace with actual production domain
-    : ["*"],
+  corsOrigin: corsOrigins.length > 0 ? corsOrigins : ["*"],
 
   // Database
   databaseUrl: env("DATABASE_URL"),
