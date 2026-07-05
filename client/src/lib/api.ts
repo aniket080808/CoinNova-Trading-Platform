@@ -10,7 +10,12 @@ const isLocalHost = (hostname: string) => ["localhost", "127.0.0.1", "::1"].incl
 
 export function resolveApiBase(hostname: string, configuredUrl: string | undefined, isProd: boolean) {
   const trimmedUrl = configuredUrl?.trim();
-  if (trimmedUrl) return trimmedUrl.replace(/\/$/, "");
+  const isLocalConfiguredUrl = !!trimmedUrl && /^(https?:\/\/)?(localhost|127\.0\.0\.1|::1)(:\d+)?(\/|$)/i.test(trimmedUrl);
+
+  if (trimmedUrl && (!isProd || !isLocalConfiguredUrl)) {
+    return trimmedUrl.replace(/\/$/, "");
+  }
+
   if (isLocalHost(hostname)) return `http://${hostname}:3001`;
   if (isProd) return DEFAULT_API_URL;
   return "/api";
