@@ -7,10 +7,15 @@
 // When building for production or a deployed environment, use the configured API URL or the deployed Render backend fallback.
 const DEFAULT_API_URL = "https://coinnova-trading-platform.onrender.com";
 const isLocalHost = (hostname: string) => ["localhost", "127.0.0.1", "::1"].includes(hostname);
+const isNetlifyHost = (hostname: string) => hostname.endsWith(".netlify.app") || hostname === "netlify.app";
 
 export function resolveApiBase(hostname: string, configuredUrl: string | undefined, isProd: boolean) {
   const trimmedUrl = configuredUrl?.trim();
   const isLocalConfiguredUrl = !!trimmedUrl && /^(https?:\/\/)?(localhost|127\.0\.0\.1|::1)(:\d+)?(\/|$)/i.test(trimmedUrl);
+
+  if (isProd && (isNetlifyHost(hostname) || hostname === "coinnova-trading.netlify.app")) {
+    return DEFAULT_API_URL;
+  }
 
   if (trimmedUrl && (!isProd || !isLocalConfiguredUrl)) {
     return trimmedUrl.replace(/\/$/, "");
