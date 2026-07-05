@@ -1,4 +1,5 @@
 import { config } from "../config.js";
+import { sendEmail } from "../utils/sendEmail.js";
 
 // ─── Helpers ─────────────────────────────────────────────
 
@@ -8,28 +9,7 @@ export function generateOTP(): string {
 }
 
 async function sendResendEmail(to: string, subject: string, html: string): Promise<boolean> {
-  const response = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${config.email.resendApiKey}`,
-    },
-    body: JSON.stringify({
-      from: config.email.resendFrom,
-      to,
-      subject,
-      html,
-    }),
-  });
-
-  if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`Resend API failed: ${response.status} ${response.statusText} ${body}`);
-  }
-
-  console.log(`📧  Resend email sent to ${to}: ${subject}`);
-  console.log(`[DEV TESTING OTP LOG] ${html}`);
-  return true;
+  return await sendEmail(to, subject, html);
 }
 
 /** Send a generic email */
