@@ -38,7 +38,7 @@ export const config = {
     // Email
     email: {
         resendApiKey: env("RESEND_API_KEY"),
-        resendFrom: optionalEnv("RESEND_FROM", "CoinNova <noreply@coinnova.io>"),
+        resendFrom: optionalEnv("RESEND_FROM", "CoinNova <onboarding@resend.dev>"),
     },
     // Stripe
     stripe: {

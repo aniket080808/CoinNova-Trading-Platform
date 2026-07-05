@@ -1,36 +1,29 @@
+import { Resend } from "resend";
 import { config } from "../config.js";
+const resendClient = () => {
+    if (!config.email.resendApiKey)
+        return null;
+    return new Resend(config.email.resendApiKey);
+};
 export async function sendEmail(to, subject, html) {
-    if (!config.email.resendApiKey) {
+    const client = resendClient();
+    if (!client) {
         console.warn("⚠️  RESEND_API_KEY not configured — skipping send");
         console.log(`[DEV TESTING OTP LOG] ${html}`);
         return false;
     }
     try {
-        const res = await fetch("https://api.resend.com/emails", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${config.email.resendApiKey}`,
-            },
-            body: JSON.stringify({
-                from: config.email.resendFrom,
-                to,
-                subject,
-                html,
-            }),
+        const resp = await client.emails.send({
+            from: config.email.resendFrom,
+            to,
+            subject,
+            html,
         });
-        if (!res.ok) {
-            const body = await res.text();
-            console.warn(`📧  Resend API error: ${res.status} ${res.statusText} ${body}`);
-            console.log(`[DEV TESTING OTP LOG] ${html}`);
-            return false;
-        }
-        console.log(`📧  Resend email sent to ${to}: ${subject}`);
-        console.log(`[DEV TESTING OTP LOG] ${html}`);
+        console.log(`📧  Resend email sent to ${to}: ${subject} — id=${resp.id}`);
         return true;
     }
     catch (err) {
-        console.warn("📧  Resend request failed:", err?.message || err);
+        console.warn("📧  Resend SDK send failed:", err?.message || err);
         console.log(`[DEV TESTING OTP LOG] ${html}`);
         return false;
     }
