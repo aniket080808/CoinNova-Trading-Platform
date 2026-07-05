@@ -13,7 +13,15 @@ export default function GoogleAuthCallback() {
     const token = params.get("token");
     const error = params.get("error");
     const encodedUser = params.get("user");
-    const parsedUser = encodedUser ? JSON.parse(decodeURIComponent(encodedUser)) : null;
+    let parsedUser: any = null;
+
+    if (encodedUser) {
+      try {
+        parsedUser = JSON.parse(decodeURIComponent(encodedUser));
+      } catch {
+        parsedUser = null;
+      }
+    }
 
     if (error) {
       toast.error(`Google sign-in failed: ${error}`);
@@ -39,16 +47,24 @@ export default function GoogleAuthCallback() {
     setMode("live");
     setUser(fallbackUser);
 
-    fetchMe()
-      .then(() => {
-        syncAll();
-        toast.success("Signed in with Google");
-        navigate("/dashboard", { replace: true });
-      })
-      .catch(() => {
-        toast.success("Signed in with Google");
-        navigate("/dashboard", { replace: true });
-      });
+    const finishLogin = async () => {
+      try {
+        await fetchMe();
+      } catch {
+        // ignore and continue
+      }
+
+      try {
+        await syncAll();
+      } catch {
+        // ignore and continue
+      }
+
+      toast.success("Signed in with Google");
+      navigate("/dashboard", { replace: true });
+    };
+
+    void finishLogin();
   }, [fetchMe, navigate, params, setMode, setUser, syncAll]);
 
   return null;
