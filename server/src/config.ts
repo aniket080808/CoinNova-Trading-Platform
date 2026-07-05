@@ -19,13 +19,21 @@ function optionalEnv(key: string, fallback = ""): string {
 }
 
 const smtpUser = optionalEnv("SMTP_USER");
-const corsOrigins = optionalEnv(
-  "CORS_ORIGIN",
-  "http://localhost:8080,http://127.0.0.1:8080"
-)
+const defaultCorsOrigins = [
+  "http://localhost:3000",
+  "http://localhost:5173",
+  "http://localhost:8080",
+  "http://127.0.0.1:3000",
+  "http://127.0.0.1:5173",
+  "http://127.0.0.1:8080",
+  "https://coinnova-trading.netlify.app",
+  "https://coinnova-trading-platform.onrender.com",
+];
+const configuredCorsOrigins = optionalEnv("CORS_ORIGIN", "")
   .split(",")
   .map((value) => value.trim())
   .filter(Boolean);
+const corsOrigins = [...new Set([...defaultCorsOrigins, ...configuredCorsOrigins])];
 
 export const config = {
   port: Number(env("PORT", "3001")),
@@ -56,8 +64,8 @@ export const config = {
   stripe: {
     secretKey: env("STRIPE_SECRET_KEY"),
     webhookSecret: env("STRIPE_WEBHOOK_SECRET", ""),
-    successUrl: env("STRIPE_SUCCESS_URL", "http://localhost:8080/wallet?deposit=success"),
-    cancelUrl: env("STRIPE_CANCEL_URL", "http://localhost:8080/wallet?deposit=cancel"),
+    successUrl: env("STRIPE_SUCCESS_URL", "https://coinnova-trading.netlify.app/wallet?deposit=success"),
+    cancelUrl: env("STRIPE_CANCEL_URL", "https://coinnova-trading.netlify.app/wallet?deposit=cancel"),
   },
 
   // Razorpay
@@ -70,8 +78,8 @@ export const config = {
   google: {
     clientId: optionalEnv("GOOGLE_CLIENT_ID"),
     clientSecret: optionalEnv("GOOGLE_CLIENT_SECRET"),
-    redirectUri: optionalEnv("GOOGLE_REDIRECT_URI", "http://localhost:3001/auth/google/callback"),
-    frontendUrl: optionalEnv("FRONTEND_URL", "http://localhost:8080"),
+    redirectUri: optionalEnv("GOOGLE_REDIRECT_URI", ""),
+    frontendUrl: optionalEnv("FRONTEND_URL", "https://coinnova-trading.netlify.app"),
   },
 
   // Groq AI

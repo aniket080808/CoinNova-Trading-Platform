@@ -22,13 +22,28 @@ import { startCronJobs } from "./services/cron.js";
 startCronJobs();
 
 const app = express();
+app.set("trust proxy", true);
 
 // ─── Global middleware ───────────────────────────────────
 
 // CORS
+const allowedOrigins = new Set(config.corsOrigin.map((value) => value.replace(/\/$/, "")));
+const isAllowedOrigin = (origin?: string) => {
+  if (!origin) return true;
+
+  const normalizedOrigin = origin.replace(/\/$/, "");
+  if (allowedOrigins.has(normalizedOrigin)) return true;
+  if (/^https?:\/\/localhost(?::\d+)?$/i.test(normalizedOrigin)) return true;
+  if (/^https?:\/\/127\.0\.0\.1(?::\d+)?$/i.test(normalizedOrigin)) return true;
+  if (/^https:\/\/[^/]+\.netlify\.app$/i.test(normalizedOrigin)) return true;
+  if (/^https:\/\/[^/]+\.onrender\.com$/i.test(normalizedOrigin)) return true;
+
+  return false;
+};
+
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin || config.corsOrigin.includes(origin) || config.corsOrigin.includes("*")) {
+    if (isAllowedOrigin(origin) || config.corsOrigin.includes("*")) {
       callback(null, true);
     } else {
       callback(new Error("Not allowed by CORS"));
