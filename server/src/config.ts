@@ -21,7 +21,7 @@ function optionalEnv(key: string, fallback = ""): string {
 const smtpUser = optionalEnv("SMTP_USER");
 const corsOrigins = optionalEnv(
   "CORS_ORIGIN",
-  "https://coinnova.io,https://coinnova-trading-platform.netlify.app,http://localhost:8080"
+  "http://localhost:8080,http://127.0.0.1:8080"
 )
   .split(",")
   .map((value) => value.trim())

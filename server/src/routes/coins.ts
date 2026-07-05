@@ -11,14 +11,25 @@ async function fetchWithCache(url: string) {
     return cached.data;
   }
 
-  const res = await fetch(url);
+  const res = await fetch(url, {
+    headers: {
+      "Accept": "application/json",
+      "User-Agent": "CoinNova/1.0",
+    },
+  });
+
   if (!res.ok) {
     if (res.status === 429) {
-      // If we get rate limited, return stale cache if available
       if (cached) return cached.data;
-      throw new Error("CoinGecko Rate Limit exceeded");
+      throw new Error("CoinGecko rate limit exceeded");
     }
-    throw new Error("CoinGecko API Error");
+
+    if (res.status >= 500) {
+      if (cached) return cached.data;
+      throw new Error("CoinGecko service temporarily unavailable");
+    }
+
+    throw new Error(`CoinGecko API error: ${res.status}`);
   }
 
   const data = await res.json();
@@ -80,11 +91,17 @@ router.get("/:id/history-range", async (req, res) => {
       res.status(400).json({ error: "from and to timestamps are required" });
       return;
     }
+
     const url = `https://api.coingecko.com/api/v3/coins/${id}/market_chart/range?vs_currency=${vs_currency}&from=${from}&to=${to}`;
     const data = await fetchWithCache(url);
     res.json(data);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(200).json({
+      prices: [],
+      market_caps: [],
+      total_volumes: [],
+      warning: err.message || "Coin history is temporarily unavailable",
+    });
   }
 });
 
