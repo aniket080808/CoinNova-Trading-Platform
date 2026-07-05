@@ -16,7 +16,7 @@ export default function GoogleAuthCallback() {
     const parsedUser = encodedUser ? JSON.parse(decodeURIComponent(encodedUser)) : null;
 
     if (error) {
-      toast.error("Google sign-in failed");
+      toast.error(`Google sign-in failed: ${error}`);
       navigate("/login", { replace: true });
       return;
     }
