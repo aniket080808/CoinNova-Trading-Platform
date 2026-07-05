@@ -16,6 +16,10 @@ export declare const config: {
         readonly pass: string;
         readonly from: string;
     };
+    readonly email: {
+        readonly resendApiKey: string;
+        readonly resendFrom: string;
+    };
     readonly stripe: {
         readonly secretKey: string;
         readonly webhookSecret: string;

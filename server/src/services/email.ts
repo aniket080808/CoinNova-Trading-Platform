@@ -33,9 +33,42 @@ export function generateOTP(): string {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
+async function sendResendEmail(to: string, subject: string, html: string): Promise<boolean> {
+  if (!config.email.resendApiKey) {
+    throw new Error("RESEND_API_KEY is not configured");
+  }
+
+  const response = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${config.email.resendApiKey}`,
+    },
+    body: JSON.stringify({
+      from: config.email.resendFrom,
+      to,
+      subject,
+      html,
+    }),
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`Resend API failed: ${response.status} ${response.statusText} ${body}`);
+  }
+
+  console.log(`📧  Resend email sent to ${to}: ${subject}`);
+  console.log(`[DEV TESTING OTP LOG] ${html}`);
+  return true;
+}
+
 /** Send a generic email */
 async function sendMail(to: string, subject: string, html: string): Promise<boolean> {
   try {
+    if (config.email.resendApiKey) {
+      return await sendResendEmail(to, subject, html);
+    }
+
     await transporter.sendMail({
       from: config.smtp.from,
       to,

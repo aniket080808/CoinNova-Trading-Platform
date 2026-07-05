@@ -53,6 +53,14 @@ export const config = {
     from: optionalEnv("SMTP_FROM", smtpUser ? `CoinNova <${smtpUser}>` : "CoinNova <noreply@coinnova.io>"),
   },
 
+  email: {
+    resendApiKey: optionalEnv("RESEND_API_KEY"),
+    resendFrom: optionalEnv(
+      "RESEND_FROM",
+      optionalEnv("SMTP_FROM", smtpUser ? `CoinNova <${smtpUser}>` : "CoinNova <noreply@coinnova.io>")
+    ),
+  },
+
   // Stripe
   stripe: {
     secretKey: env("STRIPE_SECRET_KEY"),

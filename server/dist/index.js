@@ -19,11 +19,23 @@ import behaviorRoutes from "./routes/behavior.js";
 import { startCronJobs } from "./services/cron.js";
 startCronJobs();
 const app = express();
+app.set("trust proxy", 1);
 // ─── Global middleware ───────────────────────────────────
 // CORS
+const allowedOrigins = new Set(config.corsOrigin.map((value) => value.replace(/\/$/, "")));
+const isAllowedOrigin = (origin) => {
+    if (!origin)
+        return true;
+    const normalizedOrigin = origin.replace(/\/$/, "");
+    if (allowedOrigins.has(normalizedOrigin))
+        return true;
+    if (normalizedOrigin === "https://coinnova-trading.netlify.app")
+        return true;
+    return false;
+};
 app.use(cors({
     origin: (origin, callback) => {
-        if (!origin || config.corsOrigin.includes(origin) || config.corsOrigin.includes("*")) {
+        if (isAllowedOrigin(origin) || config.corsOrigin.includes("*")) {
             callback(null, true);
         }
         else {
