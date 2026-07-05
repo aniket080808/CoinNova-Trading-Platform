@@ -6,6 +6,11 @@
   VITE_API_URL = "https://coinnova-trading-platform.onrender.com"
 
 [[redirects]]
+  from = "/auth/google/success"
+  to = "/index.html"
+  status = 200
+
+[[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200
