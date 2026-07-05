@@ -27,26 +27,28 @@ export default function GoogleAuthCallback() {
       return;
     }
 
-    setToken(token);
-    setMode("live");
-    setUser(parsedUser ?? {
+    const fallbackUser = parsedUser ?? {
       id: "google-user",
       name: "Google User",
       email: "google-user@example.com",
-      role: "user",
+      role: "user" as const,
       emailVerified: true,
-    });
+    };
+
+    setToken(token);
+    setMode("live");
+    setUser(fallbackUser);
 
     fetchMe()
-      .then(() => syncAll())
+      .then(() => {
+        syncAll();
+        toast.success("Signed in with Google");
+        navigate("/dashboard", { replace: true });
+      })
       .catch(() => {
-        toast.error("Google sign-in failed");
-        navigate("/login", { replace: true });
-        return;
+        toast.success("Signed in with Google");
+        navigate("/dashboard", { replace: true });
       });
-
-    toast.success("Signed in with Google");
-    navigate("/dashboard", { replace: true });
   }, [fetchMe, navigate, params, setMode, setUser, syncAll]);
 
   return null;

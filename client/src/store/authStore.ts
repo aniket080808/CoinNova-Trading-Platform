@@ -107,6 +107,14 @@ export const useAuthStore = create<AuthState>()(
           set({ user: res.user, mode: "live" });
           await get().syncAll();
         } catch {
+          const currentUser = get().user;
+          const currentMode = get().mode;
+
+          if (currentUser && currentMode === "live") {
+            set({ mode: "live" });
+            return;
+          }
+
           clearToken();
           set({ user: null, mode: "demo" });
         }

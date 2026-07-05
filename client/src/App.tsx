@@ -42,13 +42,16 @@ function AuthInitializer() {
   const { updateRate, setCurrency } = useCurrencyStore();
 
   useEffect(() => {
-    // Reset client-side demo mode every time the website is opened/refreshed
-    resetDemo();
-    
+    const hasExistingSession = isAuthenticated();
+
+    if (!hasExistingSession) {
+      resetDemo();
+    }
+
     // Initial rate fetch
     updateRate();
 
-    if (isAuthenticated()) {
+    if (hasExistingSession) {
       fetchMe().then(() => syncAll()).catch(() => {});
     }
     
