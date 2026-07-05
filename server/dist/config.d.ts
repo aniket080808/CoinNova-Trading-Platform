@@ -9,13 +9,6 @@ export declare const config: {
     readonly adminId: "00000000-0000-0000-0000-000000000000";
     readonly demoEmail: "demo@coinnova.io";
     readonly demoPassword: "demo123";
-    readonly smtp: {
-        readonly host: string;
-        readonly port: number;
-        readonly user: string;
-        readonly pass: string;
-        readonly from: string;
-    };
     readonly email: {
         readonly resendApiKey: string;
         readonly resendFrom: string;

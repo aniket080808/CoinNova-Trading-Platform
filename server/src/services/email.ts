@@ -1,30 +1,4 @@
-import nodemailer from "nodemailer";
 import { config } from "../config.js";
-
-// ─── Transporter ─────────────────────────────────────────
-
-const transporter = nodemailer.createTransport({
-  service: config.smtp.host.includes("gmail") ? "gmail" : undefined,
-  host: config.smtp.host,
-  port: config.smtp.port,
-  secure: config.smtp.port === 465,
-  auth: {
-    user: config.smtp.user,
-    pass: config.smtp.pass,
-  },
-  authMethod: "PLAIN",
-  requireTLS: true,
-  connectionTimeout: 10000,
-  greetingTimeout: 10000,
-  socketTimeout: 10000,
-});
-
-// Dev fallback: verify connection once at startup
-transporter.verify().then(() => {
-  console.log("✉️  SMTP connection verified");
-}).catch((err) => {
-  console.warn("⚠️  SMTP connection failed — emails will be logged to console", err.message);
-});
 
 // ─── Helpers ─────────────────────────────────────────────
 
@@ -34,10 +8,6 @@ export function generateOTP(): string {
 }
 
 async function sendResendEmail(to: string, subject: string, html: string): Promise<boolean> {
-  if (!config.email.resendApiKey) {
-    throw new Error("RESEND_API_KEY is not configured");
-  }
-
   const response = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: {
@@ -64,27 +34,11 @@ async function sendResendEmail(to: string, subject: string, html: string): Promi
 
 /** Send a generic email */
 async function sendMail(to: string, subject: string, html: string): Promise<boolean> {
-  try {
-    if (config.email.resendApiKey) {
-      return await sendResendEmail(to, subject, html);
-    }
-
-    await transporter.sendMail({
-      from: config.smtp.from,
-      to,
-      subject,
-      html,
-    });
-    console.log(`📧  Email sent to ${to}: ${subject}`);
-    console.log(`[DEV TESTING OTP LOG] ${html}`);
-    return true;
-  } catch (err: any) {
-    console.warn(`📧  [DEV FALLBACK] Email to ${to}:`);
-    console.warn(`    Subject: ${subject}`);
-    console.warn(`    Error: ${err?.message || err}`);
-    console.warn(`    Body: ${html}`);
-    return false;
+  if (!config.email.resendApiKey) {
+    throw new Error("RESEND_API_KEY is not configured");
   }
+
+  return await sendResendEmail(to, subject, html);
 }
 
 // ─── Email Templates ────────────────────────────────────

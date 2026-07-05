@@ -14,7 +14,6 @@ function env(key, fallback) {
 function optionalEnv(key, fallback = "") {
     return process.env[key] ?? fallback;
 }
-const smtpUser = optionalEnv("SMTP_USER");
 const defaultCorsOrigins = [
     "https://coinnova-trading.netlify.app",
 ];
@@ -37,16 +36,9 @@ export const config = {
     demoEmail: "demo@coinnova.io",
     demoPassword: "demo123",
     // Email
-    smtp: {
-        host: env("SMTP_HOST", "smtp.gmail.com"),
-        port: Number(env("SMTP_PORT", "587")),
-        user: smtpUser,
-        pass: env("SMTP_PASS"),
-        from: optionalEnv("SMTP_FROM", smtpUser ? `CoinNova <${smtpUser}>` : "CoinNova <noreply@coinnova.io>"),
-    },
     email: {
-        resendApiKey: optionalEnv("RESEND_API_KEY"),
-        resendFrom: optionalEnv("RESEND_FROM", optionalEnv("SMTP_FROM", smtpUser ? `CoinNova <${smtpUser}>` : "CoinNova <noreply@coinnova.io>")),
+        resendApiKey: env("RESEND_API_KEY"),
+        resendFrom: optionalEnv("RESEND_FROM", "CoinNova <noreply@coinnova.io>"),
     },
     // Stripe
     stripe: {
