@@ -14,11 +14,13 @@ async function sendResendEmail(to: string, subject: string, html: string): Promi
 
 /** Send a generic email */
 async function sendMail(to: string, subject: string, html: string): Promise<boolean> {
-  if (!config.email.resendApiKey) {
-    throw new Error("RESEND_API_KEY is not configured");
+  try {
+    const ok = await sendResendEmail(to, subject, html);
+    return ok;
+  } catch (err: any) {
+    console.warn(`📧  sendMail failed: ${err?.message || err}`);
+    return false;
   }
-
-  return await sendResendEmail(to, subject, html);
 }
 
 // ─── Email Templates ────────────────────────────────────

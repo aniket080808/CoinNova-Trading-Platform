@@ -1,37 +1,22 @@
-import { config } from "../config.js";
+import { sendEmail } from "../utils/sendEmail.js";
 // ─── Helpers ─────────────────────────────────────────────
 /** Generate a 6-digit OTP code */
 export function generateOTP() {
     return Math.floor(100000 + Math.random() * 900000).toString();
 }
 async function sendResendEmail(to, subject, html) {
-    const response = await fetch("https://api.resend.com/emails", {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${config.email.resendApiKey}`,
-        },
-        body: JSON.stringify({
-            from: config.email.resendFrom,
-            to,
-            subject,
-            html,
-        }),
-    });
-    if (!response.ok) {
-        const body = await response.text();
-        throw new Error(`Resend API failed: ${response.status} ${response.statusText} ${body}`);
-    }
-    console.log(`📧  Resend email sent to ${to}: ${subject}`);
-    console.log(`[DEV TESTING OTP LOG] ${html}`);
-    return true;
+    return await sendEmail(to, subject, html);
 }
 /** Send a generic email */
 async function sendMail(to, subject, html) {
-    if (!config.email.resendApiKey) {
-        throw new Error("RESEND_API_KEY is not configured");
+    try {
+        const ok = await sendResendEmail(to, subject, html);
+        return ok;
     }
-    return await sendResendEmail(to, subject, html);
+    catch (err) {
+        console.warn(`📧  sendMail failed: ${err?.message || err}`);
+        return false;
+    }
 }
 // ─── Email Templates ────────────────────────────────────
 export async function sendVerificationEmail(to, otp) {
