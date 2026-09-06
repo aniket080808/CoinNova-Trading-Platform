@@ -560,16 +560,66 @@ export default function Portfolio() {
         ? 24 * 3600 * 1000
         : 48 * 3600 * 1000;
 
-    const baseline = Math.max(totalCostBasis, totalPortfolioValue * 0.9);
-    const diff = totalPortfolioValue - baseline;
-
     const points = [];
+
+    // Case 1: Zero crypto holdings (100% cash) -> Steady, flat valuation line at current net worth
+    if (enriched.length === 0 || totalHoldingsValue <= 0) {
+      for (let i = pointsCount; i >= 0; i--) {
+        const t = now - i * timeStep;
+        const label =
+          performanceTimeframe === "24h"
+            ? new Date(t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+            : new Date(t).toLocaleDateString([], { month: "short", day: "numeric" });
+
+        points.push({
+          time: label,
+          value: parseFloat(totalPortfolioValue.toFixed(2)),
+          profit: 0,
+        });
+      }
+      return points;
+    }
+
+    // Case 2: User holds crypto positions -> Calculate trajectory from actual holdings and price changes
+    const baselineCost = walletUSD + totalCostBasis;
+
     for (let i = pointsCount; i >= 0; i--) {
       const t = now - i * timeStep;
-      const progress = (pointsCount - i) / pointsCount;
-      const curve = Math.sin((progress * Math.PI) / 2);
-      const jitter = Math.sin(i * 1.6) * (totalPortfolioValue * 0.012);
-      const val = i === 0 ? totalPortfolioValue : Math.max(0, baseline + diff * curve + jitter);
+      const progress = (pointsCount - i) / pointsCount; // 0 = oldest, 1 = current (now)
+
+      // Calculate total value of all holdings at this historical time point
+      let historicalCryptoValue = 0;
+      for (const h of enriched) {
+        let pctChange = 0;
+        if (performanceTimeframe === "24h") {
+          pctChange = h.change24h || 0;
+        } else if (performanceTimeframe === "7d") {
+          pctChange =
+            (h.coin as any)?.price_change_percentage_7d_in_currency ??
+            (h.coin as any)?.price_change_percentage_7d ??
+            h.change24h ??
+            0;
+        } else {
+          // 30d / 90d / all: use 30d change or unrealized gain pct
+          pctChange =
+            (h.coin as any)?.price_change_percentage_30d ??
+            (h.unrealizedPnLPct || 0);
+        }
+
+        // Price at the start of the timeframe
+        const startPrice = h.currentPrice / (1 + pctChange / 100);
+        // Linear interpolation from startPrice to currentPrice
+        const trendPrice = startPrice + (h.currentPrice - startPrice) * progress;
+        // Subtle micro-variance that naturally anchors to 0 at endpoints (progress 0 and 1)
+        const dampener = Math.sin(progress * Math.PI); // 0 at ends, max in middle
+        const noise = Math.sin(i * 2.3 + h.symbol.charCodeAt(0)) * 0.004;
+        const estimatedPrice = i === 0 ? h.currentPrice : Math.max(0, trendPrice * (1 + dampener * noise));
+
+        historicalCryptoValue += h.amount * estimatedPrice;
+      }
+
+      const totalVal = i === 0 ? totalPortfolioValue : walletUSD + historicalCryptoValue;
+      const profit = totalVal - baselineCost;
 
       const label =
         performanceTimeframe === "24h"
@@ -578,12 +628,13 @@ export default function Portfolio() {
 
       points.push({
         time: label,
-        value: parseFloat(val.toFixed(2)),
-        profit: parseFloat((val - baseline).toFixed(2)),
+        value: parseFloat(totalVal.toFixed(2)),
+        profit: parseFloat(profit.toFixed(2)),
       });
     }
+
     return points;
-  }, [performanceTimeframe, totalPortfolioValue, totalCostBasis]);
+  }, [performanceTimeframe, totalPortfolioValue, totalHoldingsValue, totalCostBasis, walletUSD, enriched]);
 
   // ─── 7. Health Check Handlers ────────────────────────────
   const handleAnalysis = async () => {
@@ -1173,7 +1224,10 @@ export default function Portfolio() {
                       <YAxis
                         stroke="#ffffff40"
                         fontSize={11}
-                        domain={["auto", "auto"]}
+                        domain={[
+                          (dataMin: number) => (totalHoldingsValue === 0 ? Math.max(0, Math.floor(dataMin * 0.95)) : "auto"),
+                          (dataMax: number) => (totalHoldingsValue === 0 ? Math.ceil(dataMax * 1.05) : "auto"),
+                        ]}
                         tickFormatter={(v) => `$${v >= 1000 ? (v / 1000).toFixed(1) + "k" : v}`}
                         width={50}
                       />
@@ -1183,7 +1237,14 @@ export default function Portfolio() {
                           border: "1px solid #334155",
                           borderRadius: "12px",
                         }}
-                        formatter={(val: number) => [formatUSD(val), "Net Worth"]}
+                        formatter={(val: number, _name: string, item: any) => {
+                          const profit = item?.payload?.profit ?? 0;
+                          const profitSign = profit >= 0 ? "+" : "";
+                          return [
+                            `${formatUSD(val)}${profit !== 0 ? ` (${profitSign}${formatUSD(profit)})` : ""}`,
+                            "Portfolio Value",
+                          ];
+                        }}
                         labelStyle={{ color: "#94a3b8", fontSize: "12px" }}
                       />
                       <Area

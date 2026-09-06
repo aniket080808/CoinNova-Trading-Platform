@@ -191,6 +191,27 @@ export default function Market() {
 
   const trendingCoins = trendingData?.coins?.map((c: any) => c.item) ?? [];
 
+  // Top gainers & losers with instant fallback to loaded coins
+  const gainers = useMemo(() => {
+    if (stats?.gainers && stats.gainers.length > 0) return stats.gainers.slice(0, 4);
+    if (coins && coins.length > 0) {
+      return [...coins]
+        .sort((a, b) => (b.price_change_percentage_24h ?? 0) - (a.price_change_percentage_24h ?? 0))
+        .slice(0, 4);
+    }
+    return [];
+  }, [stats?.gainers, coins]);
+
+  const losers = useMemo(() => {
+    if (stats?.losers && stats.losers.length > 0) return stats.losers.slice(0, 4);
+    if (coins && coins.length > 0) {
+      return [...coins]
+        .sort((a, b) => (a.price_change_percentage_24h ?? 0) - (b.price_change_percentage_24h ?? 0))
+        .slice(0, 4);
+    }
+    return [];
+  }, [stats?.losers, coins]);
+
   const list = useMemo(() => {
     let l = [...coins];
 
@@ -260,10 +281,10 @@ export default function Market() {
               <span className="text-[10px] text-muted-foreground ml-auto">24h</span>
             </div>
             <div className="space-y-2">
-              {(stats?.gainers ?? []).slice(0, 4).map((c, i) => (
+              {gainers.map((c, i) => (
                 <MiniCoinCard key={c.id} coin={c} rank={i + 1} />
               ))}
-              {!stats && <div className="text-center text-muted-foreground text-xs py-4">Loading...</div>}
+              {gainers.length === 0 && <div className="text-center text-muted-foreground text-xs py-4">Loading market data...</div>}
             </div>
           </GlassCard>
         </div>
@@ -279,10 +300,10 @@ export default function Market() {
               <span className="text-[10px] text-muted-foreground ml-auto">24h</span>
             </div>
             <div className="space-y-2">
-              {(stats?.losers ?? []).slice(0, 4).map((c, i) => (
+              {losers.map((c, i) => (
                 <MiniCoinCard key={c.id} coin={c} rank={i + 1} />
               ))}
-              {!stats && <div className="text-center text-muted-foreground text-xs py-4">Loading...</div>}
+              {losers.length === 0 && <div className="text-center text-muted-foreground text-xs py-4">Loading market data...</div>}
             </div>
           </GlassCard>
         </div>
