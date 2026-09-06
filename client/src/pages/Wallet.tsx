@@ -10,7 +10,7 @@ import { useState, useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { useSearchParams } from "react-router-dom";
 import { usePinDialog, PinDialog } from "@/components/PinDialog";
-import { razorpayApi } from "@/lib/api";
+import { razorpayApi, walletApi } from "@/lib/api";
 
 export default function Wallet() {
   const { walletUSD, deposit, withdraw, mode, syncWallet, currency, convert, format, user } = useDemo();
@@ -36,12 +36,10 @@ export default function Wallet() {
       url.searchParams.delete("session_id");
       window.history.replaceState({}, "", url);
 
-      import("@/lib/api").then(({ walletApi }) => {
-        walletApi.confirmDeposit(sessionId).then(async () => {
-          toast.success("Deposit confirmed successfully");
-          await syncWallet();
-        }).catch((err) => toast.error(err.message || "Could not confirm deposit"));
-      });
+      walletApi.confirmDeposit(sessionId).then(async () => {
+        toast.success("Deposit confirmed successfully");
+        await syncWallet();
+      }).catch((err) => toast.error(err.message || "Could not confirm deposit"));
     } else if (depositStatus === "cancel") {
       toast.error("Deposit cancelled");
       const url = new URL(window.location.href);

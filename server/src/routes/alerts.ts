@@ -1,6 +1,6 @@
 import { Router, Request, Response } from "express";
 import { z } from "zod";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, and } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { alerts } from "../db/schema.js";
 import { requireAuth } from "../middleware/auth.js";
@@ -36,7 +36,15 @@ router.post("/", requireAuth, validate(createSchema), async (req: Request, res: 
 router.delete("/:id", requireAuth, async (req: Request, res: Response) => {
   try {
     const id = req.params.id as string;
-    await db.delete(alerts).where(eq(alerts.id, id));
+    const deleted = await db
+      .delete(alerts)
+      .where(and(eq(alerts.id, id), eq(alerts.userId, req.user!.userId)))
+      .returning();
+
+    if (deleted.length === 0) {
+      res.status(404).json({ error: "Alert not found" });
+      return;
+    }
     res.json({ message: "Alert deleted" });
   } catch (err) { console.error("Alert delete error:", err); res.status(500).json({ error: "Internal server error" }); }
 });

@@ -19,7 +19,7 @@ export function validateTrade(
 ): GuardianResult {
   if (proposed.type === "sell") {
     // Basic sell logic: mostly checking for panic sell
-    return { isSafe: true, riskScore: 10, warning: null };
+    return { passed: true, isSafe: true, riskScore: 10, warnings: [], warning: null };
   }
 
   // It's a BUY trade
@@ -78,8 +78,8 @@ export function validateTrade(
       averageLoss,
       recommendation: "Wait 30 minutes and review your journal before entering. This trade matches patterns of previous losses.",
     };
-    return { isSafe: false, riskScore: Math.min(100, riskScore), warning };
+    return { passed: false, isSafe: false, riskScore: Math.min(100, riskScore), warnings: matchedPatterns, warning };
   }
 
-  return { isSafe: true, riskScore, warning: null };
+  return { passed: true, isSafe: true, riskScore, warnings: [], warning: null };
 }

@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
-import { eq, sql } from "drizzle-orm";
+import { eq, sql, and } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { wallets, transactions } from "../db/schema.js";
 import { requireAuth } from "../middleware/auth.js";
@@ -70,16 +70,49 @@ router.post("/verify", requireAuth, validate(verifySchema), async (req, res) => 
       return res.status(400).json({ error: "Invalid payment signature" });
     }
 
-    // Success! Update wallet and transaction
+    // Success! Update wallet and transaction atomically if pending
+    let wasProcessedNow = false;
     await db.transaction(async (tx) => {
+      const updatedTxs = await tx
+        .update(transactions)
+        .set({ status: "completed" })
+        .where(
+          and(
+            eq(transactions.stripeSessionId, razorpay_order_id),
+            eq(transactions.status, "pending"),
+            eq(transactions.userId, userId)
+          )
+        )
+        .returning();
+
+      if (updatedTxs.length === 0) {
+        return;
+      }
+
       await tx.update(wallets)
         .set({ balanceUsd: sql`${wallets.balanceUsd}::numeric + ${amountUsd}` })
         .where(eq(wallets.userId, userId));
 
-      await tx.update(transactions)
-        .set({ status: "completed" })
-        .where(eq(transactions.stripeSessionId, razorpay_order_id));
+      wasProcessedNow = true;
     });
+
+    if (!wasProcessedNow) {
+      const [existing] = await db
+        .select()
+        .from(transactions)
+        .where(eq(transactions.stripeSessionId, razorpay_order_id))
+        .limit(1);
+
+      if (!existing) {
+        return res.status(404).json({ error: "Order not found" });
+      }
+
+      if (existing.status === "completed") {
+        return res.status(200).json({ message: "Payment already verified and processed", alreadyProcessed: true });
+      }
+
+      return res.status(400).json({ error: `Transaction is currently ${existing.status}` });
+    }
 
     await sendDepositConfirmation(req.user!.email, amountUsd);
 

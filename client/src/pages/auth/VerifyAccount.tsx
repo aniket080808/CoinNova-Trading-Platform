@@ -20,6 +20,7 @@ export default function VerifyAccount() {
   const auth = useAuthStore();
 
   const email = location.state?.email || auth.user?.email || "";
+  const allowSkip = location.state?.allowSkip !== undefined ? location.state.allowSkip : !!auth.user;
 
   const handleVerify = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -27,15 +28,16 @@ export default function VerifyAccount() {
     setLoading(true);
 
     try {
-      await authApi.verifyOtp(email, otp, "email_verification");
+      const res = await authApi.verifyOtp(email, otp, "email_verification");
       // Verification successful, update user state
       if (auth.user) {
-        auth.setUser({ ...auth.user, isVerified: true });
+        auth.setUser({ ...auth.user, emailVerified: true });
       }
-      toast.success("Account verified successfully!");
+      await auth.fetchMe().catch(() => {});
+      toast.success(res.message || "Account verified successfully!");
       navigate("/dashboard");
     } catch (err: any) {
-      setError(err.response?.data?.error || "Invalid OTP. Please try again.");
+      setError(err.message || "Invalid OTP. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -43,10 +45,10 @@ export default function VerifyAccount() {
 
   const handleResend = async () => {
     try {
-      await api.post("/auth/resend-otp");
+      await authApi.resendOtp(email);
       toast.success("Verification code resent to your email.");
     } catch (err: any) {
-      toast.error("Failed to resend code.");
+      toast.error(err.message || "Failed to resend code.");
     }
   };
 
@@ -85,6 +87,17 @@ export default function VerifyAccount() {
             {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ArrowRight className="mr-2 h-4 w-4" />}
             {loading ? "Verifying..." : "Verify account"}
           </Button>
+
+          {allowSkip && (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => navigate("/dashboard")}
+              className="w-full glass text-muted-foreground hover:text-foreground hover:bg-white/5 border-border/40"
+            >
+              Maybe later / Skip for now
+            </Button>
+          )}
         </form>
 
         <div className="text-center text-sm text-muted-foreground">

@@ -171,8 +171,10 @@ export interface GuardianWarning {
 }
 
 export interface GuardianResult {
+  passed: boolean;
   isSafe: boolean;
   riskScore: number; // 0-100
+  warnings?: string[];
   warning: GuardianWarning | null;
 }
 

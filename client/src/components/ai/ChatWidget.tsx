@@ -89,21 +89,38 @@ export const ChatWidget = () => {
             if (data === "[DONE]") break;
             try {
               const parsed = JSON.parse(data);
+              if (parsed.error) {
+                throw new Error(parsed.error);
+              }
               if (parsed.content) {
                 assistantContent += parsed.content;
                 setMsgs((m) => [...m.slice(0, -1), { role: "assistant", content: assistantContent }]);
               }
-            } catch { /* skip unparseable chunks */ }
+            } catch (err: any) {
+              if (err.message && !err.message.includes("JSON")) {
+                throw err;
+              }
+            }
           }
+        }
+
+        if (!assistantContent.trim()) {
+          throw new Error("Stream returned empty response");
         }
       }
     } catch {
       // Fallback to non-streaming or mock if API fails
       try {
         const res = await aiApi.chat(newMsgs, contextStr);
-        setMsgs((m) => [...m, { role: "assistant", content: res.reply }]);
+        setMsgs((m) => {
+          const filtered = m.filter(msg => msg.role !== "assistant" || msg.content.trim().length > 0);
+          return [...filtered, { role: "assistant", content: res.reply }];
+        });
       } catch (err: any) {
-        setMsgs((m) => [...m, { role: "assistant", content: "Sorry, I couldn't reach the AI service right now. Please try again later." }]);
+        setMsgs((m) => {
+          const filtered = m.filter(msg => msg.role !== "assistant" || msg.content.trim().length > 0);
+          return [...filtered, { role: "assistant", content: "Sorry, I couldn't reach the AI service right now. Please try again later." }];
+        });
       }
     }
 
@@ -135,7 +152,7 @@ export const ChatWidget = () => {
             </div>
           </div>
           <div ref={scrollRef} className="flex-1 overflow-y-auto scrollbar-thin p-3 space-y-3">
-            {msgs.map((m, i) => (
+            {msgs.filter(m => m.content && m.content.trim().length > 0).map((m, i) => (
               <div key={i} className={cn("flex", m.role === "user" ? "justify-end" : "justify-start")}>
                 <div className={cn(
                   "max-w-[85%] rounded-2xl px-3 py-2 text-sm",

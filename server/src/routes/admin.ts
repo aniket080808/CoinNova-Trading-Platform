@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { desc, sql, eq } from "drizzle-orm";
+import { desc, sql, eq, and } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { users, wallets, transactions } from "../db/schema.js";
 import { requireAuth, requireAdmin } from "../middleware/auth.js";
@@ -81,13 +81,16 @@ router.get("/transactions", requireAuth, requireAdmin, async (req, res) => {
 router.post("/withdrawals/:id/approve", requireAuth, requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
-    const [tx] = await db.select().from(transactions).where(eq(transactions.id, id as string)).limit(1);
-    
-    if (!tx || tx.type !== "withdraw" || tx.status !== "pending") {
-      return res.status(400).json({ error: "Invalid transaction" });
+    const updated = await db
+      .update(transactions)
+      .set({ status: "completed" })
+      .where(and(eq(transactions.id, id as string), eq(transactions.type, "withdraw"), eq(transactions.status, "pending")))
+      .returning();
+
+    if (updated.length === 0) {
+      return res.status(400).json({ error: "Transaction not found or already processed" });
     }
 
-    await db.update(transactions).set({ status: "completed" }).where(eq(transactions.id, id as string));
     res.json({ message: "Withdrawal approved" });
   } catch (err) { console.error("Approve error:", err); res.status(500).json({ error: "Internal server error" }); }
 });
@@ -96,17 +99,31 @@ router.post("/withdrawals/:id/approve", requireAuth, requireAdmin, async (req, r
 router.post("/withdrawals/:id/reject", requireAuth, requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
-    const [tx] = await db.select().from(transactions).where(eq(transactions.id, id as string)).limit(1);
-    
-    if (!tx || tx.type !== "withdraw" || tx.status !== "pending") {
-      return res.status(400).json({ error: "Invalid transaction" });
-    }
+    let refundedTx: typeof transactions.$inferSelect | null = null;
 
-    // REFUND THE USER
     await db.transaction(async (trx) => {
-      await trx.update(wallets).set({ balanceUsd: sql`${wallets.balanceUsd}::numeric + ${tx.amount}` }).where(eq(wallets.userId, tx.userId));
-      await trx.update(transactions).set({ status: "failed" }).where(eq(transactions.id, id as string));
+      const updated = await trx
+        .update(transactions)
+        .set({ status: "failed" })
+        .where(and(eq(transactions.id, id as string), eq(transactions.type, "withdraw"), eq(transactions.status, "pending")))
+        .returning();
+
+      if (updated.length === 0) {
+        return;
+      }
+
+      refundedTx = updated[0];
+
+      // Atomically refund the user wallet
+      await trx
+        .update(wallets)
+        .set({ balanceUsd: sql`${wallets.balanceUsd}::numeric + ${refundedTx.amount}` })
+        .where(eq(wallets.userId, refundedTx.userId));
     });
+
+    if (!refundedTx) {
+      return res.status(400).json({ error: "Transaction not found or already processed" });
+    }
 
     res.json({ message: "Withdrawal rejected and refunded" });
   } catch (err) { console.error("Reject error:", err); res.status(500).json({ error: "Internal server error" }); }

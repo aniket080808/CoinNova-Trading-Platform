@@ -232,4 +232,30 @@ const settingsHandler = async (req: any, res: any) => {
 router.post("/settings", requireAuth, settingsHandler);
 router.put("/settings", requireAuth, settingsHandler);
 
+// ─── Set / Update Password ──────────────────────────────
+
+const setPasswordSchema = z.object({
+  password: z.string().min(6, "Password must be at least 6 characters").max(128),
+});
+
+router.post("/password", requireAuth, validate(setPasswordSchema), async (req, res) => {
+  try {
+    const { password } = req.body;
+    const userId = req.user!.userId;
+    const { role } = req.user!;
+
+    if (role === "admin") {
+      return res.status(403).json({ error: "Admin password is managed by system config" });
+    }
+
+    const passwordHash = await bcrypt.hash(password, 12);
+    await db.update(users).set({ passwordHash }).where(eq(users.id, userId));
+
+    res.json({ message: "Password updated successfully" });
+  } catch (err) {
+    console.error("Set password error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 export default router;

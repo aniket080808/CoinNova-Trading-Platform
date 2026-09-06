@@ -51,13 +51,7 @@ app.use((req, res, next) => {
   next();
 });
 
-// Rate limiting
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 min
-  max: 20,
-  message: { error: "Too many requests, try again later" },
-});
-
+// AI rate limiting
 const aiLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 min
   max: 15,
@@ -66,7 +60,7 @@ const aiLimiter = rateLimit({
 
 // ─── Routes ──────────────────────────────────────────────
 
-app.use("/auth", authLimiter, authRoutes);
+app.use("/auth", authRoutes);
 app.use("/wallet", walletRoutes);
 app.use("/trades", tradeRoutes);
 app.use("/watchlist", watchlistRoutes);

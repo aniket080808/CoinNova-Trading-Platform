@@ -131,8 +131,8 @@ export const authApi = {
       method: "POST", body: { email, code, password }, skipAuth: true,
     }),
 
-  resendOtp: () =>
-    apiFetch<{ message: string }>("/auth/resend-otp", { method: "POST" }),
+  resendOtp: (email?: string) =>
+    apiFetch<{ message: string; alreadyVerified?: boolean }>("/auth/resend-otp", { method: "POST", body: { email } }),
 };
 
 // ─── Wallet API ──────────────────────────────────────────
@@ -203,7 +203,6 @@ export const aiApi = {
   chat: (messages: { role: "user" | "assistant"; content: string }[], context?: string) =>
     apiFetch<{ reply: string }>("/ai/chat", { method: "POST", body: { messages, context } }),
 
-  /** SSE streaming chat — returns a ReadableStream */
   chatStream: async (messages: { role: "user" | "assistant"; content: string }[], context?: string) => {
     const token = getToken();
     const res = await fetch(`${API_BASE}/ai/chat/stream`, {
@@ -214,6 +213,10 @@ export const aiApi = {
       },
       body: JSON.stringify({ messages, context }),
     });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new ApiError(data.error ?? "AI service unavailable", res.status);
+    }
     return res.body;
   },
 
@@ -325,6 +328,9 @@ export const userApi = {
 
   verifyEmailChange: (newEmail: string, otp: string) =>
     apiFetch<{ message: string }>("/user/email/verify", { method: "POST", body: { newEmail, otp } }),
+
+  setPassword: (password: string) =>
+    apiFetch<{ message: string }>("/user/password", { method: "POST", body: { password } }),
 };
 
 

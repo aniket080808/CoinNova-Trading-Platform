@@ -96,7 +96,8 @@ export const TradeDialog = ({ coin, trigger, defaultTab = "buy" }: { coin: Coin;
         });
         setBusy(false);
         
-        if (!warning.passed) {
+        const isPassed = warning.passed ?? warning.isSafe ?? (warning.riskScore !== undefined ? warning.riskScore <= 50 : true);
+        if (!isPassed) {
           setGuardianWarning(warning);
           setPendingTrade(() => () => executeBuy(amountInUsd, pin));
           return;
@@ -154,7 +155,8 @@ export const TradeDialog = ({ coin, trigger, defaultTab = "buy" }: { coin: Coin;
         });
         setBusy(false);
         
-        if (!warning.passed) {
+        const isPassed = warning.passed ?? warning.isSafe ?? (warning.riskScore !== undefined ? warning.riskScore <= 50 : true);
+        if (!isPassed) {
           setGuardianWarning(warning);
           setPendingTrade(() => () => executeSell(v, pin));
           return;

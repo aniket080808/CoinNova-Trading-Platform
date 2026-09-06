@@ -5,7 +5,7 @@ import { z } from "zod";
 import { eq, and, sql } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { users, wallets, otpCodes, transactions, holdings, watchlist, alerts, aiChats } from "../db/schema.js";
-import { signToken, requireAuth } from "../middleware/auth.js";
+import { signToken, requireAuth, optionalAuth } from "../middleware/auth.js";
 import { validate } from "../middleware/validate.js";
 import { config } from "../config.js";
 import {
@@ -13,36 +13,43 @@ import {
   sendVerificationEmail,
   sendPasswordResetEmail,
 } from "../services/email.js";
+import rateLimit from "express-rate-limit";
 
 const router = Router();
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 min
+  max: 20,
+  message: { error: "Too many attempts, please try again later" },
+});
 
 async function upsertGoogleUser(email: string, name: string, picture?: string) {
   const normalizedEmail = email.toLowerCase().trim();
   const normalizedName = name.trim() || normalizedEmail;
 
   const [existing] = await db
-    .select({ id: users.id, email: users.email, name: users.name, role: users.role })
+    .select({ id: users.id, email: users.email, name: users.name, role: users.role, emailVerified: users.emailVerified })
     .from(users)
     .where(eq(users.email, normalizedEmail))
     .limit(1);
 
   if (existing) {
     await db.update(users)
-      .set({ name: normalizedName, emailVerified: true })
+      .set({ name: normalizedName })
       .where(eq(users.id, existing.id));
 
-    return existing;
+    return { ...existing, isNew: false };
   }
 
   const passwordHash = await bcrypt.hash(crypto.randomBytes(24).toString("hex"), 12);
   const [user] = await db
     .insert(users)
-    .values({ name: normalizedName, email: normalizedEmail, passwordHash, emailVerified: true })
-    .returning({ id: users.id, email: users.email, role: users.role, name: users.name });
+    .values({ name: normalizedName, email: normalizedEmail, passwordHash, emailVerified: false })
+    .returning({ id: users.id, email: users.email, role: users.role, name: users.name, emailVerified: users.emailVerified });
 
   await db.insert(wallets).values({ userId: user.id, balanceUsd: "0" }).onConflictDoNothing();
 
-  return user;
+  return { ...user, isNew: true };
 }
 
 // ─── Schemas ─────────────────────────────────────────────
@@ -129,15 +136,34 @@ router.get("/google/callback", async (req, res) => {
     }
 
     const user = await upsertGoogleUser(profile.email, profile.name || profile.given_name || profile.email, profile.picture);
+    
+    // If user is unverified, generate and dispatch verification OTP
+    const needsVerification = !user.emailVerified;
+    if (needsVerification) {
+      try {
+        const otp = generateOTP();
+        const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+        await db.insert(otpCodes).values({
+          userId: user.id,
+          code: otp,
+          type: "email_verification",
+          expiresAt,
+        });
+        await sendVerificationEmail(user.email, otp);
+      } catch (mailErr) {
+        console.error("Failed to send Google user verification OTP:", mailErr);
+      }
+    }
+
     const token = signToken({ userId: user.id, email: user.email, role: user.role });
     const userPayload = encodeURIComponent(JSON.stringify({
       id: user.id,
       name: user.name,
       email: user.email,
       role: user.role,
-      emailVerified: true,
+      emailVerified: user.emailVerified,
     }));
-    return res.redirect(`${config.google.frontendUrl}/auth/google/success?token=${encodeURIComponent(token)}&user=${userPayload}`);
+    return res.redirect(`${config.google.frontendUrl}/auth/google/success?token=${encodeURIComponent(token)}&user=${userPayload}&needsVerification=${needsVerification}`);
   } catch (err) {
     console.error("Google auth error:", err);
     return res.redirect(`${config.google.frontendUrl}/login?error=google_auth_failed`);
@@ -146,7 +172,7 @@ router.get("/google/callback", async (req, res) => {
 
 // ─── POST /auth/register ────────────────────────────────
 
-router.post("/register", validate(registerSchema), async (req, res) => {
+router.post("/register", authLimiter, validate(registerSchema), async (req, res) => {
   try {
     const { name, email, password } = req.body;
 
@@ -209,7 +235,7 @@ router.post("/register", validate(registerSchema), async (req, res) => {
 
 // ─── POST /auth/login ───────────────────────────────────
 
-router.post("/login", validate(loginSchema), async (req, res) => {
+router.post("/login", authLimiter, validate(loginSchema), async (req, res) => {
   try {
     const { email, password } = req.body;
 
@@ -327,7 +353,7 @@ router.post("/login", validate(loginSchema), async (req, res) => {
 
 // ─── POST /auth/verify-otp ──────────────────────────────
 
-router.post("/verify-otp", validate(verifyOtpSchema), async (req, res) => {
+router.post("/verify-otp", authLimiter, validate(verifyOtpSchema), async (req, res) => {
   try {
     const { email, code, type } = req.body;
 
@@ -403,7 +429,7 @@ router.post("/verify-otp", validate(verifyOtpSchema), async (req, res) => {
 
 // ─── POST /auth/forgot ──────────────────────────────────
 
-router.post("/forgot", validate(forgotSchema), async (req, res) => {
+router.post("/forgot", authLimiter, validate(forgotSchema), async (req, res) => {
   try {
     const { email } = req.body;
 
@@ -437,7 +463,7 @@ router.post("/forgot", validate(forgotSchema), async (req, res) => {
 
 // ─── POST /auth/reset ───────────────────────────────────
 
-router.post("/reset", validate(resetSchema), async (req, res) => {
+router.post("/reset", authLimiter, validate(resetSchema), async (req, res) => {
   try {
     const { email, code, password } = req.body;
 
@@ -531,24 +557,45 @@ router.get("/me", requireAuth, async (req, res) => {
 
 // ─── POST /auth/resend-otp ─────────────────────────────
 
-router.post("/resend-otp", requireAuth, async (req, res) => {
+router.post("/resend-otp", authLimiter, optionalAuth, async (req, res) => {
   try {
-    const userId = req.user!.userId;
-    const email = req.user!.email;
+    const bodyEmail = req.body?.email ? String(req.body.email).toLowerCase().trim() : undefined;
+    const userId = req.user?.userId;
+    const authEmail = req.user?.email;
+
+    const email = bodyEmail || authEmail;
+    if (!email && !userId) {
+      return res.status(400).json({ error: "Email or authentication required to resend code" });
+    }
+
+    let user;
+    if (userId) {
+      [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+    } else if (email) {
+      [user] = await db.select().from(users).where(eq(users.email, email)).limit(1);
+    }
+
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    if (user.emailVerified) {
+      return res.json({ message: "Account is already verified", alreadyVerified: true });
+    }
 
     const otp = generateOTP();
-    const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 mins
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 mins
 
     await db.insert(otpCodes).values({
-      userId,
+      userId: user.id,
       code: otp,
       type: "email_verification",
       expiresAt,
     });
 
-    await sendVerificationEmail(email, otp);
+    await sendVerificationEmail(user.email, otp);
 
-    res.json({ message: "Verification code resent" });
+    res.json({ message: "Verification code sent to your email" });
   } catch (err) {
     console.error("Resend OTP error:", err);
     res.status(500).json({ error: "Internal server error" });

@@ -28,7 +28,10 @@ export function SmartTradeWarningModal({ open, onOpenChange, warning, onProceed 
   if (!warning) return null;
 
   const { passed, riskScore, warnings } = warning;
-  const normalizedWarnings = Array.isArray(warnings) ? warnings : [];
+  const rawMatched = (warning as any)?.warning?.matchedPatterns;
+  const normalizedWarnings = Array.isArray(warnings) && warnings.length > 0 
+    ? warnings 
+    : (Array.isArray(rawMatched) ? rawMatched : []);
   
   // If no warnings and low risk, don't show the modal as highly dangerous
   const isDanger = riskScore > 60;

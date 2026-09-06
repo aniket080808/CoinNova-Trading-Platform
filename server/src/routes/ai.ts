@@ -11,6 +11,46 @@ import { config } from "../config.js";
 const router = Router();
 const groq = new Groq({ apiKey: config.groqApiKey });
 
+const GROQ_MODELS = [
+  process.env.GROQ_MODEL || "openai/gpt-oss-120b",
+  "qwen/qwen3.8-27b",
+  "openai/gpt-oss-20b",
+  "groq/compound",
+];
+
+async function createChatCompletionWithFallback(params: any): Promise<any> {
+  let lastError: any = null;
+  for (const model of GROQ_MODELS) {
+    try {
+      return await groq.chat.completions.create({
+        ...params,
+        model,
+      });
+    } catch (err: any) {
+      console.warn(`[Groq AI] Model ${model} failed (${err.message}). Trying next fallback...`);
+      lastError = err;
+    }
+  }
+  throw lastError;
+}
+
+async function createChatCompletionStreamWithFallback(params: any): Promise<any> {
+  let lastError: any = null;
+  for (const model of GROQ_MODELS) {
+    try {
+      return await groq.chat.completions.create({
+        ...params,
+        model,
+        stream: true,
+      });
+    } catch (err: any) {
+      console.warn(`[Groq AI Stream] Model ${model} failed (${err.message}). Trying next fallback...`);
+      lastError = err;
+    }
+  }
+  throw lastError;
+}
+
 const SYSTEM_PROMPT = `You are Nova, the official AI guide for CoinNova. 
 Your goal is to provide simple, clear, and concise answers about cryptocurrency and the CoinNova platform.
 
@@ -57,8 +97,7 @@ router.post("/chat", optionalAuth, validate(chatSchema), async (req, res) => {
 
     const systemContent = context ? `${SYSTEM_PROMPT}\n\nCurrent App Context:\n${context}` : SYSTEM_PROMPT;
 
-    const completion = await groq.chat.completions.create({
-      model: "llama-3.3-70b-versatile",
+    const completion = await createChatCompletionWithFallback({
       messages: [
         { role: "system", content: systemContent },
         ...messages,
@@ -91,20 +130,18 @@ router.post("/chat/stream", optionalAuth, async (req, res) => {
     const { messages, context } = req.body;
     if (!messages?.length) { res.status(400).json({ error: "messages required" }); return; }
 
+    const systemContent = context ? `${SYSTEM_PROMPT}\n\nCurrent App Context:\n${context}` : SYSTEM_PROMPT;
+
+    const stream = await createChatCompletionStreamWithFallback({
+      messages: [{ role: "system", content: systemContent }, ...messages],
+      temperature: 0.7,
+      max_tokens: 1024,
+    });
+
     res.writeHead(200, {
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache",
       Connection: "keep-alive",
-    });
-
-    const systemContent = context ? `${SYSTEM_PROMPT}\n\nCurrent App Context:\n${context}` : SYSTEM_PROMPT;
-
-    const stream = await groq.chat.completions.create({
-      model: "llama-3.3-70b-versatile",
-      messages: [{ role: "system", content: systemContent }, ...messages],
-      temperature: 0.7,
-      max_tokens: 1024,
-      stream: true,
     });
 
     let fullReply = "";
@@ -128,10 +165,14 @@ router.post("/chat/stream", optionalAuth, async (req, res) => {
 
     res.write(`data: [DONE]\n\n`);
     res.end();
-  } catch (err) {
+  } catch (err: any) {
     console.error("AI stream error:", err);
-    res.write(`data: ${JSON.stringify({ error: "AI service unavailable" })}\n\n`);
-    res.end();
+    if (!res.headersSent) {
+      res.status(500).json({ error: "AI service unavailable" });
+    } else {
+      res.write(`data: ${JSON.stringify({ error: err?.message || "AI service unavailable" })}\n\n`);
+      res.end();
+    }
   }
 });
 
@@ -152,8 +193,7 @@ Provide:
 
 Format your response as JSON: { "level": "low|medium|high", "factors": ["..."], "recommendation": "..." }`;
 
-    const completion = await groq.chat.completions.create({
-      model: "llama-3.3-70b-versatile",
+    const completion = await createChatCompletionWithFallback({
       messages: [
         { role: "system", content: "You are a crypto risk analyst. Respond ONLY with valid JSON." },
         { role: "user", content: prompt },
@@ -195,8 +235,7 @@ Available cash: $${walletBalance.toFixed(2)}
 Provide 3-4 actionable suggestions. Consider diversification, risk management, and current market conditions.
 Format as JSON array: [{ "action": "buy|sell|hold|rebalance", "coin": "...", "reasoning": "..." }]`;
 
-    const completion = await groq.chat.completions.create({
-      model: "llama-3.3-70b-versatile",
+    const completion = await createChatCompletionWithFallback({
       messages: [
         { role: "system", content: "You are a crypto portfolio advisor. Respond ONLY with a valid JSON array. Never give financial advice — frame as educational suggestions." },
         { role: "user", content: prompt },
@@ -289,8 +328,7 @@ Provide:
 
 Be specific, direct, and educational. Keep the full response under 150 words.`;
 
-    const completion = await groq.chat.completions.create({
-      model: "llama-3.3-70b-versatile",
+    const completion = await createChatCompletionWithFallback({
       messages: [{ role: "user", content: prompt }],
       temperature: 0.6,
       max_tokens: 512,
@@ -341,8 +379,7 @@ Answer their question directly using ONLY the data in the JSON payload above. Ke
       userPrompt += `Provide a brief summary of their current Trading DNA, highlighting their top strength and their most expensive habit (if any). Do not invent any advice not supported by the data.`;
     }
 
-    const completion = await groq.chat.completions.create({
-      model: "llama-3.3-70b-versatile",
+    const completion = await createChatCompletionWithFallback({
       messages: [
         { role: "system", content: systemContent },
         { role: "user", content: userPrompt }
@@ -550,8 +587,7 @@ Provide your response strictly as a JSON object with the following keys:
 
 Keep bullet points short, concise, and educational. Base your insights strictly on the provided scores.`;
 
-    const completion = await groq.chat.completions.create({
-      model: "llama-3.3-70b-versatile",
+    const completion = await createChatCompletionWithFallback({
       messages: [{ role: "system", content: "You are a crypto portfolio advisor. Respond ONLY with valid JSON." }, { role: "user", content: prompt }],
       temperature: 0.3,
       max_tokens: 500,

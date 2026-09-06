@@ -27,26 +27,38 @@ export default function GoogleAuthCallback() {
       return;
     }
 
+    const needsVerification = params.get("needsVerification") === "true";
+
     setToken(token);
     setMode("live");
-    setUser(parsedUser ?? {
+    const userToSet = parsedUser ?? {
       id: "google-user",
       name: "Google User",
       email: "google-user@example.com",
       role: "user",
-      emailVerified: true,
-    });
+      emailVerified: false,
+    };
+    setUser(userToSet);
 
     fetchMe()
       .then(() => syncAll())
       .catch(() => {
-        toast.error("Google sign-in failed");
-        navigate("/login", { replace: true });
-        return;
+        // Ignored if session is active
       });
 
-    toast.success("Signed in with Google");
-    navigate("/dashboard", { replace: true });
+    if (needsVerification || !userToSet.emailVerified) {
+      toast.info("A verification code was sent to your email.");
+      navigate("/verify-account", {
+        replace: true,
+        state: {
+          email: userToSet.email,
+          allowSkip: true,
+        },
+      });
+    } else {
+      toast.success("Signed in with Google");
+      navigate("/dashboard", { replace: true });
+    }
   }, [fetchMe, navigate, params, setMode, setUser, syncAll]);
 
   return null;
