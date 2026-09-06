@@ -29,7 +29,7 @@ export default function Market() {
     <div className="space-y-5">
       <div>
         <h1 className="text-3xl font-display font-bold">Market</h1>
-        <p className="text-muted-foreground text-sm">Live data from CoinGecko · refreshed every minute</p>
+        <p className="text-muted-foreground text-sm">Live market data · refreshed every minute</p>
       </div>
 
       <GlassCard className="p-4">
