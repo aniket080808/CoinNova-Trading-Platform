@@ -16,39 +16,6 @@ import {
 
 const router = Router();
 
-function getRequestBaseUrl(req: { protocol?: string; get?: (name: string) => string | undefined; headers?: Record<string, string | string[] | undefined> }) {
-  const forwardedProto = req.headers?.["x-forwarded-proto"];
-  const protocol = (Array.isArray(forwardedProto) ? forwardedProto[0] : forwardedProto || req.protocol || "http").toString();
-  const forwardedHost = req.headers?.["x-forwarded-host"];
-  const host = (Array.isArray(forwardedHost) ? forwardedHost[0] : forwardedHost || req.get?.("host") || "localhost:3001").toString();
-  return `${protocol}://${host}`;
-}
-
-function resolveFrontendUrl(req: { headers?: Record<string, string | string[] | undefined> }) {
-  const configuredFrontend = config.google.frontendUrl?.trim();
-  if (configuredFrontend) return configuredFrontend.replace(/\/$/, "");
-
-  const origin = req.headers?.origin;
-  if (typeof origin === "string" && origin.trim()) return origin.replace(/\/$/, "");
-
-  const referer = req.headers?.referer;
-  if (typeof referer === "string") {
-    try {
-      return new URL(referer).origin;
-    } catch {
-      // fallback below
-    }
-  }
-
-  return "https://coinnova-trading.netlify.app";
-}
-
-function resolveRedirectUri(req: { protocol?: string; get?: (name: string) => string | undefined; headers?: Record<string, string | string[] | undefined> }) {
-  const configuredRedirect = config.google.redirectUri?.trim();
-  if (configuredRedirect) return configuredRedirect;
-  return `${getRequestBaseUrl(req)}/auth/google/callback`;
-}
-
 async function upsertGoogleUser(email: string, name: string, picture?: string) {
   const normalizedEmail = email.toLowerCase().trim();
   const normalizedName = name.trim() || normalizedEmail;
@@ -107,19 +74,19 @@ const resetSchema = z.object({
   password: z.string().min(6).max(128),
 });
 
-router.get("/google", (req, res) => {
+router.get("/google", (_req, res) => {
   const clientId = config.google.clientId;
   const clientSecret = config.google.clientSecret;
-  const frontendUrl = resolveFrontendUrl(req);
 
   if (!clientId || !clientSecret) {
-    return res.redirect(`${frontendUrl}/login?error=google_not_configured`);
+    return res.redirect(`${config.google.frontendUrl}/login?error=google_not_configured`);
   }
 
-  const redirectUri = resolveRedirectUri(req);
+  const redirectUri = encodeURIComponent(config.google.redirectUri);
+  const scope = encodeURIComponent("openid email profile");
   const authUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth");
   authUrl.searchParams.set("client_id", clientId);
-  authUrl.searchParams.set("redirect_uri", redirectUri);
+  authUrl.searchParams.set("redirect_uri", config.google.redirectUri);
   authUrl.searchParams.set("response_type", "code");
   authUrl.searchParams.set("scope", "openid email profile");
   authUrl.searchParams.set("access_type", "offline");
@@ -130,13 +97,11 @@ router.get("/google", (req, res) => {
 
 router.get("/google/callback", async (req, res) => {
   const code = req.query.code;
-  const frontendUrl = resolveFrontendUrl(req);
   if (typeof code !== "string" || !code) {
-    return res.redirect(`${frontendUrl}/login?error=google_auth_failed`);
+    return res.redirect(`${config.google.frontendUrl}/login?error=google_auth_failed`);
   }
 
   try {
-    const redirectUri = resolveRedirectUri(req);
     const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -144,7 +109,7 @@ router.get("/google/callback", async (req, res) => {
         code,
         client_id: config.google.clientId,
         client_secret: config.google.clientSecret,
-        redirect_uri: redirectUri,
+        redirect_uri: config.google.redirectUri,
         grant_type: "authorization_code",
       }),
     });
@@ -172,10 +137,10 @@ router.get("/google/callback", async (req, res) => {
       role: user.role,
       emailVerified: true,
     }));
-    return res.redirect(`${frontendUrl}/auth/google/success?token=${encodeURIComponent(token)}&user=${userPayload}`);
+    return res.redirect(`${config.google.frontendUrl}/auth/google/success?token=${encodeURIComponent(token)}&user=${userPayload}`);
   } catch (err) {
     console.error("Google auth error:", err);
-    return res.redirect(`${frontendUrl}/login?error=google_auth_failed`);
+    return res.redirect(`${config.google.frontendUrl}/login?error=google_auth_failed`);
   }
 });
 

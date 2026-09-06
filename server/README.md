@@ -1,4 +1,4 @@
-# CoinNova — Backend reference (Neon + Express)
+# CoinNova — Backend reference (Neon + Express + nodemailer)
 
 The Lovable preview hosts the **frontend only**. Use this folder as a starting point for your own server, then point `VITE_API_URL` at it.
 
@@ -6,7 +6,7 @@ The Lovable preview hosts the **frontend only**. Use this folder as a starting p
 - **Express** + TypeScript
 - **Drizzle ORM** + **Neon** (Postgres)
 - **JWT** auth + **speakeasy** (TOTP 2FA)
--- **Resend** (HTTP API) for email (verification, reset, alerts)
+- **nodemailer** for email (verification, reset, alerts)
 - **Stripe** & **Razorpay** test-mode for "Add balance"
 - **Groq** SDK for AI (chat, risk analysis, suggestions)
 
@@ -15,8 +15,10 @@ The Lovable preview hosts the **frontend only**. Use this folder as a starting p
 DATABASE_URL=postgres://...neon.tech/db
 JWT_SECRET=change-me
 GROQ_API_KEY=gsk_...
-RESEND_API_KEY=re_xxx
-RESEND_FROM="CoinNova <no-reply@example.com>"
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=...
+SMTP_PASS=...
 STRIPE_SECRET_KEY=sk_test_...
 RAZORPAY_KEY_ID=...
 RAZORPAY_KEY_SECRET=...

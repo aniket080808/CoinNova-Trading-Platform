@@ -18,18 +18,11 @@ function optionalEnv(key: string, fallback = ""): string {
   return process.env[key] ?? fallback;
 }
 
-const defaultCorsOrigins = [
-  "https://coinnova-trading.netlify.app",
-];
-const configuredCorsOrigins = optionalEnv("CORS_ORIGIN", "")
-  .split(",")
-  .map((value) => value.trim())
-  .filter(Boolean);
-const corsOrigins = [...new Set([...defaultCorsOrigins, ...configuredCorsOrigins])];
-
 export const config = {
   port: Number(env("PORT", "3001")),
-  corsOrigin: corsOrigins.length > 0 ? corsOrigins : ["*"],
+  corsOrigin: process.env.CORS_ORIGIN
+    ? (process.env.CORS_ORIGIN === "*" ? ["*"] : process.env.CORS_ORIGIN.split(",").map((s) => s.trim()))
+    : ["*"],
 
   // Database
   databaseUrl: env("DATABASE_URL"),
@@ -43,18 +36,21 @@ export const config = {
   demoEmail: "demo@coinnova.io",
   demoPassword: "demo123",
 
-  // Email
-  email: {
-    resendApiKey: env("RESEND_API_KEY"),
-    resendFrom: optionalEnv("RESEND_FROM", "CoinNova <onboarding@resend.dev>"),
+  // Email (Brevo)
+  brevo: {
+    apiKey: optionalEnv("BREVO_API_KEY"),
+    senderEmail: optionalEnv("BREVO_SENDER_EMAIL", "aniketmeshram445@gmail.com"),
+    senderName: optionalEnv("BREVO_SENDER_NAME", "CoinNova"),
+    smtpUser: optionalEnv("BREVO_SMTP_USER"),
+    smtpKey: optionalEnv("BREVO_SMTP_KEY"),
   },
 
   // Stripe
   stripe: {
     secretKey: env("STRIPE_SECRET_KEY"),
     webhookSecret: env("STRIPE_WEBHOOK_SECRET", ""),
-    successUrl: env("STRIPE_SUCCESS_URL", "https://coinnova-trading.netlify.app/wallet?deposit=success"),
-    cancelUrl: env("STRIPE_CANCEL_URL", "https://coinnova-trading.netlify.app/wallet?deposit=cancel"),
+    successUrl: env("STRIPE_SUCCESS_URL", "http://localhost:8080/wallet?deposit=success"),
+    cancelUrl: env("STRIPE_CANCEL_URL", "http://localhost:8080/wallet?deposit=cancel"),
   },
 
   // Razorpay
@@ -67,8 +63,8 @@ export const config = {
   google: {
     clientId: optionalEnv("GOOGLE_CLIENT_ID"),
     clientSecret: optionalEnv("GOOGLE_CLIENT_SECRET"),
-    redirectUri: optionalEnv("GOOGLE_REDIRECT_URI", ""),
-    frontendUrl: optionalEnv("FRONTEND_URL", "https://coinnova-trading.netlify.app"),
+    redirectUri: optionalEnv("GOOGLE_REDIRECT_URI", "http://localhost:3001/auth/google/callback"),
+    frontendUrl: optionalEnv("FRONTEND_URL", "http://localhost:8080"),
   },
 
   // Groq AI

@@ -3,32 +3,11 @@
  * Automatically attaches JWT from localStorage and handles 401 redirects.
  */
 
-// When running locally, prefer the local backend on port 3001.
-// When building for production or a deployed environment, use the configured API URL or the deployed Render backend fallback.
-const DEFAULT_API_URL = "https://coinnova-trading-platform.onrender.com";
-const isLocalHost = (hostname: string) => ["localhost", "127.0.0.1", "::1"].includes(hostname);
-const isNetlifyHost = (hostname: string) => hostname.endsWith(".netlify.app") || hostname === "netlify.app";
-
-export function resolveApiBase(hostname: string, configuredUrl: string | undefined, isProd: boolean) {
-  const trimmedUrl = configuredUrl?.trim();
-  const isLocalConfiguredUrl = !!trimmedUrl && /^(https?:\/\/)?(localhost|127\.0\.0\.1|::1)(:\d+)?(\/|$)/i.test(trimmedUrl);
-
-  if (isProd && (isNetlifyHost(hostname) || hostname === "coinnova-trading.netlify.app")) {
-    return DEFAULT_API_URL;
-  }
-
-  if (trimmedUrl && (!isProd || !isLocalConfiguredUrl)) {
-    return trimmedUrl.replace(/\/$/, "");
-  }
-
-  if (isLocalHost(hostname)) return `http://${hostname}:3001`;
-  if (isProd) return DEFAULT_API_URL;
-  return "/api";
-}
-
-const currentHostname = typeof window !== "undefined" ? window.location.hostname : "localhost";
-const envApiUrl = import.meta.env.VITE_API_URL?.trim();
-const API_BASE = resolveApiBase(currentHostname, envApiUrl, import.meta.env.PROD);
+// When on localhost, connect directly to port 3001.
+// When accessed via a tunnel (Pinggy, etc.), use the /api proxy on the same origin.
+const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+const rawApiUrl = import.meta.env.VITE_API_URL;
+const API_BASE = (rawApiUrl ? rawApiUrl.replace(/\/+$/, '') : null) ?? (isLocal ? `http://${window.location.hostname}:3001` : '/api');
 
 export function getApiBase() {
   return API_BASE;

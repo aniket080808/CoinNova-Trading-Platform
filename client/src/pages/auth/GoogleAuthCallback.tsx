@@ -13,18 +13,10 @@ export default function GoogleAuthCallback() {
     const token = params.get("token");
     const error = params.get("error");
     const encodedUser = params.get("user");
-    let parsedUser: any = null;
-
-    if (encodedUser) {
-      try {
-        parsedUser = JSON.parse(decodeURIComponent(encodedUser));
-      } catch {
-        parsedUser = null;
-      }
-    }
+    const parsedUser = encodedUser ? JSON.parse(decodeURIComponent(encodedUser)) : null;
 
     if (error) {
-      toast.error(`Google sign-in failed: ${error}`);
+      toast.error("Google sign-in failed");
       navigate("/login", { replace: true });
       return;
     }
@@ -35,36 +27,26 @@ export default function GoogleAuthCallback() {
       return;
     }
 
-    const fallbackUser = parsedUser ?? {
+    setToken(token);
+    setMode("live");
+    setUser(parsedUser ?? {
       id: "google-user",
       name: "Google User",
       email: "google-user@example.com",
-      role: "user" as const,
+      role: "user",
       emailVerified: true,
-    };
+    });
 
-    setToken(token);
-    setMode("live");
-    setUser(fallbackUser);
+    fetchMe()
+      .then(() => syncAll())
+      .catch(() => {
+        toast.error("Google sign-in failed");
+        navigate("/login", { replace: true });
+        return;
+      });
 
-    const finishLogin = async () => {
-      try {
-        await fetchMe();
-      } catch {
-        // ignore and continue
-      }
-
-      try {
-        await syncAll();
-      } catch {
-        // ignore and continue
-      }
-
-      toast.success("Signed in with Google");
-      navigate("/dashboard", { replace: true });
-    };
-
-    void finishLogin();
+    toast.success("Signed in with Google");
+    navigate("/dashboard", { replace: true });
   }, [fetchMe, navigate, params, setMode, setUser, syncAll]);
 
   return null;

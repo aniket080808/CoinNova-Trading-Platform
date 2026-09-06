@@ -1,5 +1,29 @@
+import nodemailer from "nodemailer";
 import { config } from "../config.js";
-import { sendEmail } from "../utils/sendEmail.js";
+
+// ─── Brevo SMTP Transporter (Fallback if using Brevo SMTP) ──
+
+let smtpTransporter: nodemailer.Transporter | null = null;
+
+if (config.brevo.smtpUser && config.brevo.smtpKey) {
+  smtpTransporter = nodemailer.createTransport({
+    host: "smtp-relay.brevo.com",
+    port: 587,
+    secure: false,
+    auth: {
+      user: config.brevo.smtpUser,
+      pass: config.brevo.smtpKey,
+    },
+    authMethod: "PLAIN",
+    requireTLS: true,
+  });
+
+  smtpTransporter.verify().then(() => {
+    console.log("✉️  Brevo SMTP relay connection verified");
+  }).catch((err) => {
+    console.warn("⚠️  Brevo SMTP verification failed:", err.message);
+  });
+}
 
 // ─── Helpers ─────────────────────────────────────────────
 
@@ -8,19 +32,69 @@ export function generateOTP(): string {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
-async function sendResendEmail(to: string, subject: string, html: string): Promise<boolean> {
-  return await sendEmail(to, subject, html);
-}
-
-/** Send a generic email */
+/**
+ * Send an email using Brevo.
+ * Priority 1: Brevo REST API (api.brevo.com/v3/smtp/email) - fast & reliable
+ * Priority 2: Brevo SMTP Relay (smtp-relay.brevo.com:587)
+ * Priority 3: Development console logger fallback
+ */
 async function sendMail(to: string, subject: string, html: string): Promise<boolean> {
-  try {
-    const ok = await sendResendEmail(to, subject, html);
-    return ok;
-  } catch (err: any) {
-    console.warn(`📧  sendMail failed: ${err?.message || err}`);
-    return false;
+  // 1. Brevo REST API
+  if (config.brevo.apiKey) {
+    try {
+      const res = await fetch("https://api.brevo.com/v3/smtp/email", {
+        method: "POST",
+        headers: {
+          "api-key": config.brevo.apiKey,
+          "Content-Type": "application/json",
+          "Accept": "application/json",
+        },
+        body: JSON.stringify({
+          sender: {
+            name: config.brevo.senderName,
+            email: config.brevo.senderEmail,
+          },
+          to: [{ email: to }],
+          subject,
+          htmlContent: html,
+        }),
+      });
+
+      if (!res.ok) {
+        const errorBody = await res.text();
+        throw new Error(`Brevo API responded with ${res.status}: ${errorBody}`);
+      }
+
+      console.log(`📧  [Brevo API] Email sent to ${to}: ${subject}`);
+      console.log(`[DEV TESTING OTP LOG] ${html}`);
+      return true;
+    } catch (err: any) {
+      console.error(`❌  Brevo API Error: ${err?.message || err}`);
+    }
   }
+
+  // 2. Brevo SMTP Relay (Nodemailer)
+  if (smtpTransporter) {
+    try {
+      await smtpTransporter.sendMail({
+        from: `"${config.brevo.senderName}" <${config.brevo.senderEmail}>`,
+        to,
+        subject,
+        html,
+      });
+      console.log(`📧  [Brevo SMTP] Email sent to ${to}: ${subject}`);
+      console.log(`[DEV TESTING OTP LOG] ${html}`);
+      return true;
+    } catch (err: any) {
+      console.error(`❌  Brevo SMTP Error: ${err?.message || err}`);
+    }
+  }
+
+  // 3. Fallback for Local Dev (Prints email to console so flows never break during testing)
+  console.warn(`📧  [DEV FALLBACK] Email to ${to}:`);
+  console.warn(`    Subject: ${subject}`);
+  console.warn(`    Body / OTP: ${html}`);
+  return false;
 }
 
 // ─── Email Templates ────────────────────────────────────
@@ -152,6 +226,7 @@ export async function sendPriceAlert(to: string, symbol: string, direction: stri
     `
   );
 }
+
 export async function sendEmailChangeEmail(to: string, otp: string) {
   return await sendMail(
     to,

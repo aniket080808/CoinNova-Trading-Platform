@@ -1,4 +1,3 @@
-import { getApiBase } from "@/lib/api";
 import { useCurrencyStore } from "@/store/currencyStore";
 import { useQuery } from "@tanstack/react-query";
 
@@ -6,7 +5,11 @@ import { useQuery } from "@tanstack/react-query";
  * Proxy CoinGecko through our own backend to avoid CORS and rate limits (429).
  * Our backend also implements a 1-minute cache.
  */
-const API_BASE = getApiBase();
+// When on localhost, connect directly to port 3001.
+// When accessed via a tunnel (Pinggy, etc.), use the /api proxy on the same origin.
+const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+const rawApiUrl = import.meta.env.VITE_API_URL;
+const API_BASE = (rawApiUrl ? rawApiUrl.replace(/\/+$/, '') : null) ?? (isLocal ? `http://${window.location.hostname}:3001` : '/api');
 const API = `${API_BASE}/coins`;
 
 export interface Coin {

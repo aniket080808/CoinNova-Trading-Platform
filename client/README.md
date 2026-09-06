@@ -87,10 +87,11 @@ DATABASE_URL=your_postgresql_url
 JWT_SECRET=your_jwt_secret
 JWT_EXPIRES_IN=7d
 
-# Email (Resend)
-# If the backend uses Resend for transactional emails, add the following to the server `.env`:
-# RESEND_API_KEY=re_xxx
-# RESEND_FROM="CoinNova <no-reply@example.com>"
+# Email (SMTP)
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=your_email
+SMTP_PASS=your_app_password
 
 # Stripe
 STRIPE_SECRET_KEY=your_stripe_secret
