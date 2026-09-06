@@ -916,7 +916,105 @@ router.get("/:id/history-range", async (req, res) => {
   }
 });
 
-// 10. GET /coins/:id — Coin detail (Catch-all parameterized route at the bottom)
+// 10. GET /coins/:id/depth — Order Book depth snapshot (Binance with Bybit fallback)
+router.get("/:id/depth", async (req, res) => {
+  const { id } = req.params;
+  const { limit = 20 } = req.query;
+  const numLimit = Math.min(Number(limit) || 20, 50);
+
+  try {
+    const symbol = getBybitSymbol(id);
+    const pair = symbol === "USDT" ? "USDCUSDT" : `${symbol}USDT`;
+
+    // Try Binance first
+    const binanceRes = await fetch(
+      `https://api.binance.com/api/v3/depth?symbol=${pair}&limit=${numLimit}`
+    );
+    if (binanceRes.ok) {
+      const data = (await binanceRes.json()) as any;
+      return res.json({
+        symbol: pair,
+        lastUpdateId: data.lastUpdateId,
+        bids: (data.bids || []).map((b: [string, string]) => [parseFloat(b[0]), parseFloat(b[1])]),
+        asks: (data.asks || []).map((a: [string, string]) => [parseFloat(a[0]), parseFloat(a[1])]),
+      });
+    }
+
+    // Fallback: Bybit
+    const bybitRes = await fetch(
+      `https://api.bybit.com/v5/market/orderbook?category=spot&symbol=${pair}&limit=${numLimit}`
+    );
+    if (bybitRes.ok) {
+      const bData = (await bybitRes.json()) as any;
+      if (bData.retCode === 0 && bData.result) {
+        return res.json({
+          symbol: pair,
+          lastUpdateId: Date.now(),
+          bids: (bData.result.b || []).map((b: [string, string]) => [parseFloat(b[0]), parseFloat(b[1])]),
+          asks: (bData.result.a || []).map((a: [string, string]) => [parseFloat(a[0]), parseFloat(a[1])]),
+        });
+      }
+    }
+
+    res.status(502).json({ error: "Failed to fetch order book depth" });
+  } catch (err: any) {
+    console.error(`Depth fetch failed for ${id}:`, err.message);
+    res.status(500).json({ error: err.message || "Failed to fetch order book depth" });
+  }
+});
+
+// 11. GET /coins/:id/trades — Recent public market trades (Binance with Bybit fallback)
+router.get("/:id/trades", async (req, res) => {
+  const { id } = req.params;
+  const { limit = 30 } = req.query;
+  const numLimit = Math.min(Number(limit) || 30, 60);
+
+  try {
+    const symbol = getBybitSymbol(id);
+    const pair = symbol === "USDT" ? "USDCUSDT" : `${symbol}USDT`;
+
+    // Try Binance
+    const binanceRes = await fetch(
+      `https://api.binance.com/api/v3/trades?symbol=${pair}&limit=${numLimit}`
+    );
+    if (binanceRes.ok) {
+      const data = (await binanceRes.json()) as any[];
+      const trades = (data || []).map((t: any) => ({
+        id: String(t.id),
+        price: parseFloat(t.price),
+        amount: parseFloat(t.qty),
+        time: Number(t.time),
+        isBuyerMaker: Boolean(t.isBuyerMaker),
+      }));
+      return res.json({ symbol: pair, trades });
+    }
+
+    // Fallback: Bybit
+    const bybitRes = await fetch(
+      `https://api.bybit.com/v5/market/recent-trade?category=spot&symbol=${pair}&limit=${numLimit}`
+    );
+    if (bybitRes.ok) {
+      const bData = (await bybitRes.json()) as any;
+      if (bData.retCode === 0 && bData.result?.list) {
+        const trades = (bData.result.list || []).map((t: any, idx: number) => ({
+          id: t.execId || `${t.time}-${idx}`,
+          price: parseFloat(t.price),
+          amount: parseFloat(t.size),
+          time: Number(t.time),
+          isBuyerMaker: t.side?.toLowerCase() === "sell",
+        }));
+        return res.json({ symbol: pair, trades });
+      }
+    }
+
+    res.status(502).json({ error: "Failed to fetch market trades" });
+  } catch (err: any) {
+    console.error(`Trades fetch failed for ${id}:`, err.message);
+    res.status(500).json({ error: err.message || "Failed to fetch market trades" });
+  }
+});
+
+// 12. GET /coins/:id — Coin detail (Catch-all parameterized route at the bottom)
 router.get("/:id", async (req, res) => {
   const { id } = req.params;
   try {

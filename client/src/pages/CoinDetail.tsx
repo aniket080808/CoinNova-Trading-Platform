@@ -13,7 +13,9 @@ import { aiApi } from "@/lib/api";
 import { toast } from "sonner";
 import { CandlestickChart } from "@/components/charts/CandlestickChart";
 import { CryptoNewsFeed } from "@/components/news/CryptoNewsFeed";
-
+import { OrderBook } from "@/components/trade/OrderBook";
+import { LiveTradeTape } from "@/components/trade/LiveTradeTape";
+import { useMarketDepth } from "@/hooks/useMarketDepth";
 
 import { usePrices } from "@/lib/binance";
 
@@ -72,6 +74,14 @@ export default function CoinDetail() {
     recommendation: string;
   } | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
+
+  // Market Depth & Live Trade Tape
+  const { orderBook, trades: liveMarketTrades, isLive: depthIsLive } = useMarketDepth({
+    coinId: id,
+    symbol: displayCoin?.symbol || "",
+  });
+  const [selectedLimitPrice, setSelectedLimitPrice] = useState<number | undefined>(undefined);
+  const [limitTradeOpen, setLimitTradeOpen] = useState(false);
 
   const data = useMemo(
     () => (chart?.prices ?? []).map(([t, p]) => ({ t, p, label: new Date(t).toLocaleDateString() })),
@@ -290,6 +300,35 @@ export default function CoinDetail() {
           </GlassCard>
         </div>
       </div>
+
+      {/* ── Real-Time Order Book & Live Public Trades ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        <OrderBook
+          orderBook={orderBook}
+          isLive={depthIsLive}
+          symbol={displayCoin.symbol}
+          onSelectPrice={(price) => {
+            setSelectedLimitPrice(price);
+            setLimitTradeOpen(true);
+          }}
+        />
+        <LiveTradeTape
+          trades={liveMarketTrades}
+          symbol={displayCoin.symbol}
+          isLive={depthIsLive}
+        />
+      </div>
+
+      {/* Pre-filled Limit Order Trade Modal triggered by clicking Order Book price */}
+      {limitTradeOpen && (
+        <TradeDialog
+          coin={{ ...m, current_price: currentPrice }}
+          initialTargetPrice={selectedLimitPrice}
+          initialOrderType="limit"
+          open={limitTradeOpen}
+          onOpenChange={setLimitTradeOpen}
+        />
+      )}
 
       {displayCoin.description?.en && (
         <GlassCard>

@@ -33,17 +33,28 @@ export const TradeDialog = ({
   coin,
   trigger,
   defaultTab = "buy",
+  initialTargetPrice,
+  initialOrderType,
+  open: controlledOpen,
+  onOpenChange: setControlledOpen,
 }: {
   coin: Coin;
-  trigger: ReactNode;
+  trigger?: ReactNode;
   defaultTab?: "buy" | "sell";
+  initialTargetPrice?: number;
+  initialOrderType?: "market" | "limit" | "stop_loss";
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) => {
   const { walletUSD, holdings, buy, sell, placeOrder, mode, currency, convert, format } = useDemo();
   const { open: pinOpen, requestPin, handleConfirm, handleClose } = usePinDialog();
   const { prices: livePrices } = usePrices();
   const holding = holdings.find((h) => h.coinId === coin.id);
 
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = controlledOpen !== undefined ? controlledOpen : internalOpen;
+  const setOpen = setControlledOpen !== undefined ? setControlledOpen : setInternalOpen;
+
   const [orderType, setOrderType] = useState<"market" | "limit" | "stop_loss">("market");
   const [targetPrice, setTargetPrice] = useState("");
   const [amount, setAmount] = useState(""); // Amount in current currency for buy
@@ -63,10 +74,15 @@ export const TradeDialog = ({
   // Reset or preset target price when dialog opens
   useEffect(() => {
     if (open) {
-      setTargetPrice(currentPrice.toFixed(currentPrice < 1 ? 4 : 2));
-      setOrderType("market");
+      if (initialTargetPrice) {
+        setTargetPrice(initialTargetPrice.toString());
+        setOrderType(initialOrderType || "limit");
+      } else {
+        setTargetPrice(currentPrice.toFixed(currentPrice < 1 ? 4 : 2));
+        setOrderType(initialOrderType || "market");
+      }
     }
-  }, [open, currentPrice]);
+  }, [open, currentPrice, initialTargetPrice, initialOrderType]);
 
   const executeBuy = async (amountInUsd: number, pin: string | undefined) => {
     setBusy(true);

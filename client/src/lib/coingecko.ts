@@ -215,4 +215,42 @@ export const useNews = (coin?: string, category?: string, limit = 30) => {
   });
 };
 
+// ── Market Depth & Trades ───────────────────────────────────────────────
+export interface OrderBookLevel {
+  price: number;
+  amount: number;
+  total: number;
+  percent: number;
+}
+
+export interface OrderBookData {
+  bids: OrderBookLevel[];
+  asks: OrderBookLevel[];
+  spread: number;
+  spreadPercent: number;
+  midPrice: number;
+  lastUpdateId?: number;
+}
+
+export interface PublicMarketTrade {
+  id: string;
+  price: number;
+  amount: number;
+  time: number;
+  isBuyerMaker: boolean; // true = Sell executed into Bid, false = Buy executed into Ask
+}
+
+export const fetchDepth = async (coinId: string, limit = 20): Promise<{ bids: [number, number][]; asks: [number, number][]; symbol: string }> => {
+  const r = await fetch(`${API}/${coinId}/depth?limit=${limit}`);
+  if (!r.ok) throw new Error("Failed to fetch order book depth");
+  return r.json();
+};
+
+export const fetchRecentTrades = async (coinId: string, limit = 30): Promise<{ trades: PublicMarketTrade[]; symbol: string }> => {
+  const r = await fetch(`${API}/${coinId}/trades?limit=${limit}`);
+  if (!r.ok) throw new Error("Failed to fetch market trades");
+  return r.json();
+};
+
+
 
