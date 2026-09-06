@@ -37,6 +37,16 @@ export interface Alert {
   createdAt: number;
 }
 
+export interface NotificationItem {
+  id: string;
+  type: "trade" | "alert" | "deposit" | "withdraw" | "security" | "system";
+  title: string;
+  message: string;
+  read: boolean;
+  link?: string;
+  createdAt: number;
+}
+
 /**
  * Unified hook that delegates to either the persistent AuthStore (Live)
  * or the isolated client-side DemoStore.
@@ -54,6 +64,7 @@ export const useDemo = () => {
   const transactions = isLive ? auth.transactions : demo.transactions;
   const watchlist = isLive ? auth.watchlist : demo.watchlist;
   const alerts = isLive ? auth.alerts : demo.alerts;
+  const notifications = isLive ? auth.notifications : demo.notifications;
 
   return {
     // Auth & Global
@@ -80,6 +91,7 @@ export const useDemo = () => {
     transactions,
     watchlist,
     alerts,
+    notifications,
 
     // Actions (Unified)
     syncWallet: isLive ? auth.syncWallet : demo.syncWallet,
@@ -93,6 +105,11 @@ export const useDemo = () => {
     toggleWatch: isLive ? auth.toggleWatch : demo.toggleWatch,
     addAlert: isLive ? auth.addAlert : demo.addAlert,
     removeAlert: isLive ? auth.removeAlert : demo.removeAlert,
+
+    // Notification Actions
+    markNotificationRead: isLive ? auth.markNotificationRead : demo.markNotificationRead,
+    markAllNotificationsRead: isLive ? auth.markAllNotificationsRead : demo.markAllNotificationsRead,
+    clearNotifications: isLive ? auth.clearNotifications : demo.clearNotifications,
 
     // Legacy/Internal
     resetDemo: demo.reset,

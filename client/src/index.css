@@ -137,9 +137,13 @@
   .scrollbar-thin::-webkit-scrollbar { width: 6px; height: 6px; }
   .scrollbar-thin::-webkit-scrollbar-thumb { background: hsl(var(--primary) / 0.4); border-radius: 999px; }
   .scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
+
+  .scrollbar-hide::-webkit-scrollbar { display: none; }
+  .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
 }
 
 @keyframes aurora {
   0%   { transform: translate3d(0,0,0) scale(1); }
   100% { transform: translate3d(2%, -1%, 0) scale(1.05); }
 }
+

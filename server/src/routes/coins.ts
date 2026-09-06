@@ -354,6 +354,73 @@ router.get("/:id", async (req, res) => {
   }
 });
 
+// GET /coins/:id/ohlc — Full OHLCV candlestick data for TradingView charts
+router.get("/:id/ohlc", async (req, res) => {
+  const { id } = req.params;
+  const { interval = "D", limit = 200 } = req.query;
+
+  try {
+    const symbol = getBybitSymbol(id);
+    const pair = symbol === "USDT" ? "USDCUSDT" : `${symbol}USDT`;
+    const numLimit = Math.min(Number(limit) || 200, 1000);
+
+    // Validate interval (Bybit supports: 1,3,5,15,30,60,120,240,360,720,D,W,M)
+    const validIntervals = ["1", "3", "5", "15", "30", "60", "120", "240", "360", "720", "D", "W", "M"];
+    const intv = validIntervals.includes(String(interval)) ? String(interval) : "D";
+
+    const url = `https://api.bybit.com/v5/market/kline?category=spot&symbol=${pair}&interval=${intv}&limit=${numLimit}`;
+
+    // Shorter cache for small intervals, longer for daily+
+    const cacheTtl = ["1", "3", "5"].includes(intv) ? 15_000 : ["15", "30", "60"].includes(intv) ? 30_000 : 60_000;
+    const data = await fetchWithCache(url, cacheTtl);
+
+    if (data?.retCode !== 0 || !data?.result?.list) {
+      throw new Error(`Bybit returned error: ${data?.retMsg || "unknown"}`);
+    }
+
+    // Bybit kline format: [startTime, openPrice, highPrice, lowPrice, closePrice, volume, turnover]
+    // Returns in DESCENDING order → reverse to ascending
+    const klines: any[] = data.result.list;
+    const ohlc = klines
+      .map((k: any) => ({
+        time: Math.floor(Number(k[0]) / 1000), // Lightweight Charts expects UNIX seconds
+        open: parseFloat(k[1]),
+        high: parseFloat(k[2]),
+        low: parseFloat(k[3]),
+        close: parseFloat(k[4]),
+        volume: parseFloat(k[5]),
+      }))
+      .reverse();
+
+    res.json({ ohlc, symbol: pair, interval: intv });
+  } catch (err: any) {
+    console.error(`OHLC fetch failed for ${id}:`, err.message);
+
+    // Fallback: try Binance
+    try {
+      const symbol = getBybitSymbol(id);
+      const pair = symbol === "USDT" ? "USDCUSDT" : `${symbol}USDT`;
+      const intv = String(interval);
+      const binanceInterval = intv === "D" ? "1d" : intv === "W" ? "1w" : intv === "M" ? "1M" : `${intv}m`;
+      const binanceRes = await fetch(`https://api.binance.com/api/v3/klines?symbol=${pair}&interval=${binanceInterval}&limit=${Math.min(Number(limit) || 200, 1000)}`);
+      if (binanceRes.ok) {
+        const binanceKlines = await binanceRes.json() as any[];
+        const ohlc = binanceKlines.map((k: any) => ({
+          time: Math.floor(Number(k[0]) / 1000),
+          open: parseFloat(k[1]),
+          high: parseFloat(k[2]),
+          low: parseFloat(k[3]),
+          close: parseFloat(k[4]),
+          volume: parseFloat(k[5]),
+        }));
+        return res.json({ ohlc, symbol: pair, interval: intv });
+      }
+    } catch (_) {}
+
+    res.status(500).json({ error: err.message || "Failed to load OHLC data" });
+  }
+});
+
 // GET /coins/:id/chart — Historical chart (Bybit Spot Klines)
 router.get("/:id/chart", async (req, res) => {
   const { id } = req.params;
@@ -479,6 +546,89 @@ router.get("/search/:query", async (req, res) => {
     res.json({ coins });
   } catch (err: any) {
     res.json({ coins: [] });
+  }
+});
+
+// GET /coins/global-stats — Global market overview
+router.get("/global-stats", async (_req, res) => {
+  try {
+    const tickers: any[] = await fetchWithCache(
+      "https://api.coinpaprika.com/v1/tickers?quotes=USD"
+    );
+
+    const ranked = tickers.filter((t: any) => t.rank > 0);
+    const totalMarketCap = ranked.reduce((sum: number, t: any) => sum + (t.quotes?.USD?.market_cap || 0), 0);
+    const totalVolume = ranked.reduce((sum: number, t: any) => sum + (t.quotes?.USD?.volume_24h || 0), 0);
+    
+    // BTC dominance
+    const btc = ranked.find((t: any) => t.symbol === "BTC");
+    const btcMarketCap = btc?.quotes?.USD?.market_cap || 0;
+    const btcDominance = totalMarketCap > 0 ? (btcMarketCap / totalMarketCap) * 100 : 0;
+
+    // ETH dominance
+    const eth = ranked.find((t: any) => t.symbol === "ETH");
+    const ethMarketCap = eth?.quotes?.USD?.market_cap || 0;
+    const ethDominance = totalMarketCap > 0 ? (ethMarketCap / totalMarketCap) * 100 : 0;
+
+    // Count active coins
+    const activeCryptos = ranked.length;
+
+    // Top gainers & losers (top 5 from rank <= 100)
+    const top100 = ranked.filter((t: any) => t.rank <= 100);
+    const { reverse } = await getPaprikaIdMap();
+    
+    const gainers = [...top100]
+      .sort((a: any, b: any) => (b.quotes?.USD?.percent_change_24h || 0) - (a.quotes?.USD?.percent_change_24h || 0))
+      .slice(0, 5)
+      .map((t: any) => mapPaprikaTickerToMarket(t, reverse));
+
+    const losers = [...top100]
+      .sort((a: any, b: any) => (a.quotes?.USD?.percent_change_24h || 0) - (b.quotes?.USD?.percent_change_24h || 0))
+      .slice(0, 5)
+      .map((t: any) => mapPaprikaTickerToMarket(t, reverse));
+
+    res.json({
+      totalMarketCap,
+      totalVolume,
+      btcDominance: parseFloat(btcDominance.toFixed(1)),
+      ethDominance: parseFloat(ethDominance.toFixed(1)),
+      activeCryptos,
+      gainers,
+      losers,
+    });
+  } catch (err: any) {
+    console.error("Global stats fetch failed:", err.message);
+    res.status(500).json({ error: "Failed to fetch global market stats" });
+  }
+});
+
+// GET /coins/fear-greed — Fear & Greed Index
+router.get("/fear-greed", async (_req, res) => {
+  try {
+    const data = await fetchWithCache(
+      "https://api.alternative.me/fng/?limit=7&format=json",
+      5 * 60 * 1000 // 5 min cache
+    );
+
+    if (!data?.data?.length) {
+      return res.json({ value: 50, label: "Neutral", history: [] });
+    }
+
+    const latest = data.data[0];
+    const history = data.data.map((d: any) => ({
+      value: parseInt(d.value),
+      label: d.value_classification,
+      timestamp: parseInt(d.timestamp) * 1000,
+    }));
+
+    res.json({
+      value: parseInt(latest.value),
+      label: latest.value_classification,
+      history,
+    });
+  } catch (err: any) {
+    console.error("Fear & Greed fetch failed:", err.message);
+    res.json({ value: 50, label: "Neutral", history: [] });
   }
 });
 

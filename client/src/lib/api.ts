@@ -178,6 +178,18 @@ export const tradesApi = {
   history: () => apiFetch<any[]>("/trades"),
 
   portfolio: () => apiFetch<any[]>("/trades/portfolio"),
+
+  pnlSummary: () =>
+    apiFetch<{
+      totalCostBasis: number;
+      totalRealizedPnL: number;
+      winningTrades: number;
+      losingTrades: number;
+      winRate: number;
+      bestTrade: { symbol: string; profit: number } | null;
+      worstTrade: { symbol: string; profit: number } | null;
+      totalTrades: number;
+    }>("/trades/pnl-summary"),
 };
 
 // ─── Watchlist API ───────────────────────────────────────
@@ -371,6 +383,31 @@ export const behaviorApi = {
   guardian: (trade: any) => apiFetch<any>("/behavior/guardian", { method: "POST", body: trade }),
   history: () => apiFetch<any[]>("/behavior/history"),
   achievements: () => apiFetch<any[]>("/behavior/achievements"),
+};
+
+// ─── Notifications API ────────────────────────────────────
+export interface NotificationItem {
+  id: string;
+  type: "trade" | "alert" | "deposit" | "withdraw" | "security" | "system";
+  title: string;
+  message: string;
+  read: boolean;
+  link?: string;
+  data?: any;
+  createdAt: number;
+}
+
+export const notificationsApi = {
+  list: () =>
+    apiFetch<{ notifications: NotificationItem[]; unreadCount: number }>("/notifications"),
+  markRead: (id: string) =>
+    apiFetch<{ success: boolean }>(`/notifications/${id}/read`, { method: "PATCH" }),
+  markAllRead: () =>
+    apiFetch<{ success: boolean }>("/notifications/read-all", { method: "POST" }),
+  delete: (id: string) =>
+    apiFetch<{ success: boolean }>(`/notifications/${id}`, { method: "DELETE" }),
+  clearAll: () =>
+    apiFetch<{ success: boolean }>("/notifications", { method: "DELETE" }),
 };
 
 

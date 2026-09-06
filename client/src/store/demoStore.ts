@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { type Holding, type Transaction, type Alert, type Mode } from "./demo";
+import { type Holding, type Transaction, type Alert, type NotificationItem, type Mode } from "./demo";
 
 interface DemoState {
   walletUSD: number;
@@ -8,6 +8,7 @@ interface DemoState {
   transactions: Transaction[];
   watchlist: string[];
   alerts: Alert[];
+  notifications: NotificationItem[];
 
   // Actions
   reset: () => void;
@@ -20,6 +21,12 @@ interface DemoState {
   toggleWatch: (coinId: string) => void;
   addAlert: (a: any) => void;
   removeAlert: (id: string) => void;
+
+  // Notifications
+  markNotificationRead: (id: string) => void;
+  markAllNotificationsRead: () => void;
+  clearNotifications: () => void;
+  addNotification: (item: Omit<NotificationItem, "id" | "createdAt" | "read">) => void;
 }
 
 const DEMO_DEFAULTS = {
@@ -28,6 +35,24 @@ const DEMO_DEFAULTS = {
   transactions: [],
   watchlist: ["bitcoin", "ethereum", "solana"],
   alerts: [],
+  notifications: [
+    {
+      id: "notif-welcome",
+      type: "system" as const,
+      title: "Welcome to CoinNova!",
+      message: "Your virtual trading wallet has been funded with $100,000.00 demo cash.",
+      read: false,
+      createdAt: Date.now() - 3600 * 1000,
+    },
+    {
+      id: "notif-charts",
+      type: "alert" as const,
+      title: "Pro Charts Available",
+      message: "Explore real spot candlestick charts with technical indicators on Coin pages.",
+      read: false,
+      createdAt: Date.now() - 1800 * 1000,
+    },
+  ],
 };
 
 const uid = () => Math.random().toString(36).slice(2) + Date.now().toString(36);
@@ -45,6 +70,17 @@ export const useDemoStore = create<DemoState>()(
         set((s) => ({
           walletUSD: s.walletUSD + usd,
           transactions: [{ id: uid(), type: "deposit", amount: usd, total: usd, status: "completed", createdAt: Date.now(), mode: "demo", to: label }, ...s.transactions],
+          notifications: [
+            {
+              id: uid(),
+              type: "deposit",
+              title: "Deposit Confirmed",
+              message: `Added $${usd.toLocaleString()} to your wallet balance.`,
+              read: false,
+              createdAt: Date.now(),
+            },
+            ...s.notifications,
+          ],
         })),
 
       withdraw: (usd, dest = "Bank ****1234") => {
@@ -53,6 +89,17 @@ export const useDemoStore = create<DemoState>()(
         set({
           walletUSD: s.walletUSD - usd,
           transactions: [{ id: uid(), type: "withdraw", amount: usd, total: usd, status: "pending", createdAt: Date.now(), mode: "demo", to: dest }, ...s.transactions],
+          notifications: [
+            {
+              id: uid(),
+              type: "withdraw",
+              title: "Withdrawal Requested",
+              message: `Withdrawal of $${usd.toLocaleString()} to ${dest} is processing.`,
+              read: false,
+              createdAt: Date.now(),
+            },
+            ...s.notifications,
+          ],
         });
         return true;
       },
@@ -79,6 +126,18 @@ export const useDemoStore = create<DemoState>()(
           walletUSD: s.walletUSD - usd,
           holdings: newHoldings,
           transactions: [{ id: uid(), type: "buy", coinId: coin.id, symbol: coin.symbol, amount, price, total: usd, status: "completed", createdAt: Date.now(), mode: "demo", reason, confidence }, ...s.transactions],
+          notifications: [
+            {
+              id: uid(),
+              type: "trade",
+              title: `Bought ${amount.toFixed(4)} ${coin.symbol.toUpperCase()}`,
+              message: `Filled order for $${usd.toFixed(2)} at $${price.toFixed(2)}`,
+              read: false,
+              link: `/coin/${coin.id}`,
+              createdAt: Date.now(),
+            },
+            ...s.notifications,
+          ],
         });
         return true;
       },
@@ -95,6 +154,18 @@ export const useDemoStore = create<DemoState>()(
           walletUSD: s.walletUSD + usd,
           holdings: newHoldings,
           transactions: [{ id: uid(), type: "sell", coinId, symbol: h.symbol, amount, price, total: usd, status: "completed", createdAt: Date.now(), mode: "demo", reason, confidence }, ...s.transactions],
+          notifications: [
+            {
+              id: uid(),
+              type: "trade",
+              title: `Sold ${amount.toFixed(4)} ${h.symbol.toUpperCase()}`,
+              message: `Filled order for $${usd.toFixed(2)} at $${price.toFixed(2)}`,
+              read: false,
+              link: `/coin/${coinId}`,
+              createdAt: Date.now(),
+            },
+            ...s.notifications,
+          ],
         });
         return true;
       },
@@ -103,11 +174,50 @@ export const useDemoStore = create<DemoState>()(
         watchlist: s.watchlist.includes(id) ? s.watchlist.filter((x) => x !== id) : [...s.watchlist, id],
       })),
 
-      addAlert: (a) => set((s) => ({
-        alerts: [...s.alerts, { ...a, id: uid(), active: true, createdAt: Date.now() }],
-      })),
+      addAlert: (a) => {
+        const newAlert = { ...a, id: uid(), active: true, createdAt: Date.now() };
+        set((s) => ({
+          alerts: [...s.alerts, newAlert],
+          notifications: [
+            {
+              id: uid(),
+              type: "alert",
+              title: `Price Alert Set: ${a.symbol.toUpperCase()}`,
+              message: `Alert configured for price ${a.direction} $${a.price}`,
+              read: false,
+              createdAt: Date.now(),
+            },
+            ...s.notifications,
+          ],
+        }));
+      },
 
       removeAlert: (id) => set((s) => ({ alerts: s.alerts.filter((a) => a.id !== id) })),
+
+      markNotificationRead: (id) =>
+        set((s) => ({
+          notifications: s.notifications.map((n) => (n.id === id ? { ...n, read: true } : n)),
+        })),
+
+      markAllNotificationsRead: () =>
+        set((s) => ({
+          notifications: s.notifications.map((n) => ({ ...n, read: true })),
+        })),
+
+      clearNotifications: () => set({ notifications: [] }),
+
+      addNotification: (item) =>
+        set((s) => ({
+          notifications: [
+            {
+              ...item,
+              id: uid(),
+              read: false,
+              createdAt: Date.now(),
+            },
+            ...s.notifications,
+          ],
+        })),
     }),
     { name: "coinnova-demo-storage" }
   )

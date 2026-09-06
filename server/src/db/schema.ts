@@ -349,3 +349,28 @@ export const behaviorHistoryDaily = pgTable("behavior_history_daily", {
   trend: integer("trend").notNull(), // e.g. +8 or -5
   timestamp: timestamp("timestamp").defaultNow().notNull(),
 });
+
+// ─── Notifications ────────────────────────────────────────
+
+export const notificationTypeEnum = pgEnum("notification_type", [
+  "trade",
+  "alert",
+  "deposit",
+  "withdraw",
+  "security",
+  "system",
+]);
+
+export const notifications = pgTable("notifications", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  type: notificationTypeEnum("type").default("system").notNull(),
+  title: varchar("title", { length: 255 }).notNull(),
+  message: text("message").notNull(),
+  read: boolean("read").default(false).notNull(),
+  link: text("link"),
+  data: json("data"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});

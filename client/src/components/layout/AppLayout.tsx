@@ -12,6 +12,7 @@ import { ReactNode, useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { ChatWidget } from "@/components/ai/ChatWidget";
+import { NotificationCenter } from "./NotificationCenter";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -184,7 +185,8 @@ export const AppLayout = ({ children }: { children: ReactNode }) => {
               {nav.find((n) => location.pathname.startsWith(n.to))?.label ?? "Dashboard"}
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
+            <NotificationCenter />
             <Badge variant="outline" className={cn(
               "border-primary/40 text-primary",
               mode === "demo" ? "border-amber-500/40 text-amber-500 shadow-glow-amber/20" : "border-emerald-500/40 text-emerald-500 shadow-glow-emerald/20"

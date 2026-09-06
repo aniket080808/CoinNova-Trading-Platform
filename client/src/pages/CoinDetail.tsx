@@ -6,11 +6,12 @@ import { Badge } from "@/components/ui/badge";
 import { useDemo, formatUSD, formatPct, formatNum } from "@/store/demo";
 import { TradeDialog } from "@/components/trade/TradeDialog";
 import { RiskBadge, riskFor } from "@/components/ai/RiskBadge";
-import { Star, ArrowLeft, Sparkles, Loader2, AlertCircle } from "lucide-react";
+import { Star, ArrowLeft, Sparkles, Loader2, AlertCircle, BarChart3, TrendingUp } from "lucide-react";
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { useMemo, useState, useEffect } from "react";
 import { aiApi } from "@/lib/api";
 import { toast } from "sonner";
+import { CandlestickChart } from "@/components/charts/CandlestickChart";
 
 import { usePrices } from "@/lib/binance";
 
@@ -19,6 +20,7 @@ export default function CoinDetail() {
   const { data: coin, isLoading, isError, refetch } = useCoin(id);
   const { prices: livePrices } = usePrices();
   const [days, setDays] = useState<7 | 30 | 90 | 365>(30);
+  const [chartType, setChartType] = useState<"candle" | "line">("candle");
   const { data: chart } = useChart(id, days);
   const { data: markets = [] } = useMarkets(1);
   const market = markets.find((m) => m.id === id);
@@ -162,34 +164,71 @@ export default function CoinDetail() {
             </div>
           </div>
 
-          <div className="flex gap-2">
-            {([7, 30, 90, 365] as const).map((d) => (
-              <Button key={d} size="sm" variant={days === d ? "default" : "outline"} className={days === d ? "bg-primary text-background" : "glass"} onClick={() => setDays(d)}>
-                {d === 365 ? "1Y" : `${d}D`}
-              </Button>
-            ))}
+          <div className="flex items-center justify-between gap-2 flex-wrap pt-2 border-t border-border/40">
+            <div className="flex items-center gap-1 glass p-0.5 rounded-lg text-xs">
+              <button
+                onClick={() => setChartType("candle")}
+                className={`flex items-center gap-1.5 px-3 py-1 rounded-md font-medium transition ${
+                  chartType === "candle"
+                    ? "bg-primary text-background shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <BarChart3 className="w-3.5 h-3.5" /> Candlesticks
+              </button>
+              <button
+                onClick={() => setChartType("line")}
+                className={`flex items-center gap-1.5 px-3 py-1 rounded-md font-medium transition ${
+                  chartType === "line"
+                    ? "bg-primary text-background shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <TrendingUp className="w-3.5 h-3.5" /> Line
+              </button>
+            </div>
+
+            {chartType === "line" && (
+              <div className="flex gap-1.5">
+                {([7, 30, 90, 365] as const).map((d) => (
+                  <Button
+                    key={d}
+                    size="sm"
+                    variant={days === d ? "default" : "outline"}
+                    className={`h-7 text-xs px-2.5 ${days === d ? "bg-primary text-background" : "glass"}`}
+                    onClick={() => setDays(d)}
+                  >
+                    {d === 365 ? "1Y" : `${d}D`}
+                  </Button>
+                ))}
+              </div>
+            )}
           </div>
 
-          <div className="h-72">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={data}>
-                <defs>
-                  <linearGradient id="grad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.5} />
-                    <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <XAxis dataKey="label" hide />
-                <YAxis domain={["dataMin", "dataMax"]} hide />
-                <Tooltip
-                  contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12 }}
-                  formatter={(v: any) => formatUSD(v)}
-                  labelStyle={{ color: "hsl(var(--muted-foreground))" }}
-                />
-                <Area type="monotone" dataKey="p" stroke="hsl(var(--primary))" strokeWidth={2} fill="url(#grad)" />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
+          {chartType === "candle" ? (
+            <CandlestickChart coinId={id} defaultInterval="D" />
+          ) : (
+            <div className="h-72">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={data}>
+                  <defs>
+                    <linearGradient id="grad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.5} />
+                      <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <XAxis dataKey="label" hide />
+                  <YAxis domain={["dataMin", "dataMax"]} hide />
+                  <Tooltip
+                    contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12 }}
+                    formatter={(v: any) => formatUSD(v)}
+                    labelStyle={{ color: "hsl(var(--muted-foreground))" }}
+                  />
+                  <Area type="monotone" dataKey="p" stroke="hsl(var(--primary))" strokeWidth={2} fill="url(#grad)" />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          )}
         </GlassCard>
 
         <div className="space-y-5">

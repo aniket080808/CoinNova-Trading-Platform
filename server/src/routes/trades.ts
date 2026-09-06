@@ -1,8 +1,8 @@
 import { Router } from "express";
 import { z } from "zod";
-import { eq, sql, and, desc } from "drizzle-orm";
+import { eq, sql, and, desc, asc } from "drizzle-orm";
 import { db } from "../db/index.js";
-import { wallets, holdings, transactions } from "../db/schema.js";
+import { wallets, holdings, transactions, notifications } from "../db/schema.js";
 import { requireAuth } from "../middleware/auth.js";
 import { validate } from "../middleware/validate.js";
 import { verifyTransactionPin } from "../middleware/pin.js";
@@ -69,6 +69,15 @@ router.post("/buy", requireAuth, verifyTransactionPin, validate(buySchema), asyn
       const { reason, confidence } = req.body;
       await tx.insert(transactions).values({ userId, type: "buy", coinId, symbol, amount: String(coinAmount), price: String(price), total: String(usd), status: "completed", reason: reason ?? null, confidence: confidence ?? null });
 
+      try {
+        await tx.insert(notifications).values({
+          userId,
+          type: "trade",
+          title: `Bought ${coinAmount.toFixed(4)} ${symbol.toUpperCase()}`,
+          message: `Market order executed for $${usd.toFixed(2)} at $${price.toFixed(2)}`,
+          link: `/coin/${coinId}`,
+        });
+      } catch (_) {}
     });
 
     console.log(`[BUY] Transaction complete. Fetching updated balance...`);
@@ -118,6 +127,16 @@ router.post("/sell", requireAuth, verifyTransactionPin, validate(sellSchema), as
 
       console.log(`[SELL] Recording transaction...`);
       await tx.insert(transactions).values({ userId, type: "sell", coinId, symbol: holding.symbol, amount: String(amount), price: String(price), total: String(usd), status: "completed" });
+
+      try {
+        await tx.insert(notifications).values({
+          userId,
+          type: "trade",
+          title: `Sold ${amount.toFixed(4)} ${holding.symbol.toUpperCase()}`,
+          message: `Market order executed for $${usd.toFixed(2)} at $${price.toFixed(2)}`,
+          link: `/coin/${coinId}`,
+        });
+      } catch (_) {}
     });
 
     console.log(`[SELL] Transaction complete. Fetching updated balance...`);
@@ -147,6 +166,81 @@ router.get("/portfolio", requireAuth, async (req, res) => {
     const h = await db.select().from(holdings).where(eq(holdings.userId, req.user!.userId));
     res.json(h.map(x => ({ ...x, amount: Number(x.amount), avgPrice: Number(x.avgPrice) })));
   } catch (err) { console.error("Portfolio error:", err); res.status(500).json({ error: "Internal server error" }); }
+});
+
+// GET /trades/pnl-summary — advanced P&L and trade metrics
+router.get("/pnl-summary", requireAuth, async (req, res) => {
+  try {
+    const userId = req.user!.userId;
+    const txs = await db.select().from(transactions)
+      .where(and(eq(transactions.userId, userId), eq(transactions.status, "completed")))
+      .orderBy(asc(transactions.createdAt));
+
+    const userHoldings = await db.select().from(holdings)
+      .where(eq(holdings.userId, userId));
+
+    const totalCostBasis = userHoldings.reduce((sum, h) => sum + (Number(h.amount) * Number(h.avgPrice)), 0);
+
+    // Compute realized P&L per sell trade using weighted average cost basis
+    const tracker: Record<string, { totalAmt: number; totalCost: number }> = {};
+    let totalRealizedPnL = 0;
+    let winningTrades = 0;
+    let losingTrades = 0;
+    let bestTrade: { symbol: string; profit: number } | null = null;
+    let worstTrade: { symbol: string; profit: number } | null = null;
+
+    for (const tx of txs) {
+      if (!tx.coinId) continue;
+      if (!tracker[tx.coinId]) {
+        tracker[tx.coinId] = { totalAmt: 0, totalCost: 0 };
+      }
+      const c = tracker[tx.coinId];
+      const amt = Number(tx.amount);
+      const total = Number(tx.total);
+
+      if (tx.type === "buy") {
+        c.totalAmt += amt;
+        c.totalCost += total;
+      } else if (tx.type === "sell") {
+        if (c.totalAmt > 0) {
+          const avgCost = c.totalCost / c.totalAmt;
+          const costOfSold = amt * avgCost;
+          const profit = total - costOfSold;
+          totalRealizedPnL += profit;
+
+          if (profit > 0) winningTrades++;
+          else if (profit < 0) losingTrades++;
+
+          if (!bestTrade || profit > bestTrade.profit) {
+            bestTrade = { symbol: tx.symbol || tx.coinId, profit };
+          }
+          if (!worstTrade || profit < worstTrade.profit) {
+            worstTrade = { symbol: tx.symbol || tx.coinId, profit };
+          }
+
+          c.totalAmt = Math.max(0, c.totalAmt - amt);
+          c.totalCost = Math.max(0, c.totalCost - costOfSold);
+        }
+      }
+    }
+
+    const totalSellTrades = winningTrades + losingTrades;
+    const winRate = totalSellTrades > 0 ? (winningTrades / totalSellTrades) * 100 : 0;
+
+    res.json({
+      totalCostBasis,
+      totalRealizedPnL: parseFloat(totalRealizedPnL.toFixed(2)),
+      winningTrades,
+      losingTrades,
+      winRate: Math.round(winRate),
+      bestTrade,
+      worstTrade,
+      totalTrades: txs.length,
+    });
+  } catch (err: any) {
+    console.error("P&L summary error:", err);
+    res.status(500).json({ error: "Failed to compute P&L summary" });
+  }
 });
 
 export default router;

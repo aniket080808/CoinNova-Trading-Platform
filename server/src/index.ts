@@ -17,6 +17,7 @@ import razorpayRoutes from "./routes/razorpay.js";
 import replayRoutes from "./routes/replay.js";
 import journalRoutes from "./routes/journal.js";
 import behaviorRoutes from "./routes/behavior.js";
+import notificationRoutes from "./routes/notifications.js";
 import { startCronJobs } from "./services/cron.js";
 
 startCronJobs();
@@ -73,6 +74,7 @@ app.use("/razorpay", razorpayRoutes);
 app.use("/replay", replayRoutes);
 app.use("/journal", journalRoutes);
 app.use("/behavior", behaviorRoutes);
+app.use("/notifications", notificationRoutes);
 
 // Health check
 app.get("/health", (_req, res) => {

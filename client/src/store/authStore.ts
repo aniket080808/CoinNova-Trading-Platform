@@ -1,11 +1,11 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import {
-  authApi, walletApi, tradesApi, watchlistApi, alertsApi,
+  authApi, walletApi, tradesApi, watchlistApi, alertsApi, notificationsApi,
   setToken, clearToken, getToken, isAuthenticated,
   type AuthUser,
 } from "@/lib/api";
-import { type Holding, type Transaction, type Alert, type Mode } from "./demo";
+import { type Holding, type Transaction, type Alert, type NotificationItem, type Mode } from "./demo";
 
 interface AuthState {
   mode: Mode;
@@ -18,6 +18,7 @@ interface AuthState {
   transactions: Transaction[];
   watchlist: string[];
   alerts: Alert[];
+  notifications: NotificationItem[];
 
   // Actions
   setMode: (m: Mode) => void;
@@ -34,6 +35,7 @@ interface AuthState {
   syncTransactions: () => Promise<void>;
   syncWatchlist: () => Promise<void>;
   syncAlerts: () => Promise<void>;
+  syncNotifications: () => Promise<void>;
   syncAll: () => Promise<void>;
 
   // Live operations
@@ -45,6 +47,10 @@ interface AuthState {
   toggleWatch: (coinId: string) => Promise<void>;
   addAlert: (coinId: string, symbol: string, direction: "above" | "below", price: number) => Promise<void>;
   removeAlert: (id: string) => Promise<void>;
+
+  markNotificationRead: (id: string) => Promise<void>;
+  markAllNotificationsRead: () => Promise<void>;
+  clearNotifications: () => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -58,6 +64,7 @@ export const useAuthStore = create<AuthState>()(
       transactions: [],
       watchlist: [],
       alerts: [],
+      notifications: [],
 
       setMode: (mode) => set({ mode }),
       setUser: (user) => set({ user }),
@@ -127,9 +134,17 @@ export const useAuthStore = create<AuthState>()(
       syncAlerts: async () => {
         try { const res = await alertsApi.list(); set({ alerts: res }); } catch (e) { console.error(e); }
       },
+      syncNotifications: async () => {
+        try {
+          const res = await notificationsApi.list();
+          set({ notifications: res.notifications });
+        } catch (e) {
+          console.error(e);
+        }
+      },
       syncAll: async () => {
         if (get().mode !== "live") return;
-        await Promise.all([get().syncWallet(), get().syncHoldings(), get().syncTransactions(), get().syncWatchlist(), get().syncAlerts()]);
+        await Promise.all([get().syncWallet(), get().syncHoldings(), get().syncTransactions(), get().syncWatchlist(), get().syncAlerts(), get().syncNotifications()]);
       },
 
       deposit: async (amount, transactionPin?) => {
@@ -176,6 +191,31 @@ export const useAuthStore = create<AuthState>()(
       removeAlert: async (id) => {
         await alertsApi.remove(id);
         await get().syncAlerts();
+      },
+
+      markNotificationRead: async (id) => {
+        try {
+          await notificationsApi.markRead(id);
+          set((s) => ({
+            notifications: s.notifications.map((n) => (n.id === id ? { ...n, read: true } : n)),
+          }));
+        } catch (_) {}
+      },
+
+      markAllNotificationsRead: async () => {
+        try {
+          await notificationsApi.markAllRead();
+          set((s) => ({
+            notifications: s.notifications.map((n) => ({ ...n, read: true })),
+          }));
+        } catch (_) {}
+      },
+
+      clearNotifications: async () => {
+        try {
+          await notificationsApi.clearAll();
+          set({ notifications: [] });
+        } catch (_) {}
       },
     }),
     {
