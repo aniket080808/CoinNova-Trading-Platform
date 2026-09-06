@@ -374,3 +374,50 @@ export const notifications = pgTable("notifications", {
   data: json("data"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
+
+// ─── Orders (Limit, Stop-Loss, Take-Profit) ───────────────
+
+export const orderTypeEnum = pgEnum("order_type", [
+  "limit",
+  "stop_loss",
+  "take_profit",
+]);
+
+export const orderSideEnum = pgEnum("order_side", ["buy", "sell"]);
+
+export const orderStatusEnum = pgEnum("order_status", [
+  "open",
+  "filled",
+  "cancelled",
+  "expired",
+]);
+
+export const orders = pgTable(
+  "orders",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    coinId: varchar("coin_id", { length: 100 }).notNull(),
+    symbol: varchar("symbol", { length: 20 }).notNull(),
+    type: orderTypeEnum("type").notNull(),
+    side: orderSideEnum("side").notNull(),
+    targetPrice: numeric("target_price", { precision: 18, scale: 8 }).notNull(),
+    amount: numeric("amount", { precision: 18, scale: 8 }).notNull(),
+    total: numeric("total", { precision: 18, scale: 8 }).notNull(),
+    status: orderStatusEnum("status").default("open").notNull(),
+    filledPrice: numeric("filled_price", { precision: 18, scale: 8 }),
+    reason: varchar("reason", { length: 50 }),
+    confidence: integer("confidence"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    filledAt: timestamp("filled_at"),
+    cancelledAt: timestamp("cancelled_at"),
+  },
+  (t) => [
+    index("orders_user_idx").on(t.userId),
+    index("orders_status_idx").on(t.status),
+    index("orders_coin_idx").on(t.coinId),
+  ]
+);
+

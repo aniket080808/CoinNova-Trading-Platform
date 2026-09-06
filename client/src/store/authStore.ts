@@ -1,9 +1,9 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import {
-  authApi, walletApi, tradesApi, watchlistApi, alertsApi, notificationsApi,
+  authApi, walletApi, tradesApi, watchlistApi, alertsApi, notificationsApi, ordersApi,
   setToken, clearToken, getToken, isAuthenticated,
-  type AuthUser,
+  type AuthUser, type OrderItem,
 } from "@/lib/api";
 import { type Holding, type Transaction, type Alert, type NotificationItem, type Mode } from "./demo";
 
@@ -19,6 +19,7 @@ interface AuthState {
   watchlist: string[];
   alerts: Alert[];
   notifications: NotificationItem[];
+  orders: OrderItem[];
 
   // Actions
   setMode: (m: Mode) => void;
@@ -36,6 +37,7 @@ interface AuthState {
   syncWatchlist: () => Promise<void>;
   syncAlerts: () => Promise<void>;
   syncNotifications: () => Promise<void>;
+  syncOrders: () => Promise<void>;
   syncAll: () => Promise<void>;
 
   // Live operations
@@ -44,6 +46,18 @@ interface AuthState {
   transfer: (amount: number, recipient: string) => Promise<void>;
   buy: (coin: { id: string; symbol: string; name: string; image: string }, usd: number, price: number, transactionPin?: string, reason?: string, confidence?: number) => Promise<void>;
   sell: (coinId: string, amount: number, price: number, transactionPin?: string, reason?: string, confidence?: number) => Promise<void>;
+  placeOrder: (data: {
+    coinId: string;
+    symbol: string;
+    type: "limit" | "stop_loss" | "take_profit";
+    side: "buy" | "sell";
+    targetPrice: number;
+    amount: number;
+    pin?: string;
+    reason?: string;
+    confidence?: number;
+  }) => Promise<void>;
+  cancelOrder: (id: string) => Promise<void>;
   toggleWatch: (coinId: string) => Promise<void>;
   addAlert: (coinId: string, symbol: string, direction: "above" | "below", price: number) => Promise<void>;
   removeAlert: (id: string) => Promise<void>;
@@ -52,6 +66,7 @@ interface AuthState {
   markAllNotificationsRead: () => Promise<void>;
   clearNotifications: () => Promise<void>;
 }
+
 
 export const useAuthStore = create<AuthState>()(
   persist(
@@ -65,6 +80,7 @@ export const useAuthStore = create<AuthState>()(
       watchlist: [],
       alerts: [],
       notifications: [],
+      orders: [],
 
       setMode: (mode) => set({ mode }),
       setUser: (user) => set({ user }),
@@ -104,7 +120,7 @@ export const useAuthStore = create<AuthState>()(
 
       logout: () => {
         clearToken();
-        set({ user: null, mode: "demo", walletUSD: 0, holdings: [], transactions: [], watchlist: [], alerts: [] });
+        set({ user: null, mode: "demo", walletUSD: 0, holdings: [], transactions: [], watchlist: [], alerts: [], notifications: [], orders: [] });
       },
 
       fetchMe: async () => {
@@ -142,9 +158,25 @@ export const useAuthStore = create<AuthState>()(
           console.error(e);
         }
       },
+      syncOrders: async () => {
+        try {
+          const res = await ordersApi.list("all");
+          set({ orders: res.orders });
+        } catch (e) {
+          console.error(e);
+        }
+      },
       syncAll: async () => {
         if (get().mode !== "live") return;
-        await Promise.all([get().syncWallet(), get().syncHoldings(), get().syncTransactions(), get().syncWatchlist(), get().syncAlerts(), get().syncNotifications()]);
+        await Promise.all([
+          get().syncWallet(),
+          get().syncHoldings(),
+          get().syncTransactions(),
+          get().syncWatchlist(),
+          get().syncAlerts(),
+          get().syncNotifications(),
+          get().syncOrders(),
+        ]);
       },
 
       deposit: async (amount, transactionPin?) => {
@@ -172,6 +204,17 @@ export const useAuthStore = create<AuthState>()(
         await tradesApi.sell(coinId, amount, price, transactionPin, reason, confidence);
         await get().syncAll();
       },
+
+      placeOrder: async (data) => {
+        await ordersApi.create(data);
+        await get().syncAll();
+      },
+
+      cancelOrder: async (id) => {
+        await ordersApi.cancel(id);
+        await get().syncAll();
+      },
+
 
       toggleWatch: async (coinId) => {
         const s = get();

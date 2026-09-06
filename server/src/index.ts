@@ -18,9 +18,13 @@ import replayRoutes from "./routes/replay.js";
 import journalRoutes from "./routes/journal.js";
 import behaviorRoutes from "./routes/behavior.js";
 import notificationRoutes from "./routes/notifications.js";
+import ordersRoutes from "./routes/orders.js";
 import { startCronJobs } from "./services/cron.js";
+import { startOrderEngine } from "./services/orderEngine.js";
 
 startCronJobs();
+startOrderEngine();
+
 
 const app = express();
 
@@ -75,6 +79,7 @@ app.use("/replay", replayRoutes);
 app.use("/journal", journalRoutes);
 app.use("/behavior", behaviorRoutes);
 app.use("/notifications", notificationRoutes);
+app.use("/orders", ordersRoutes);
 
 // Health check
 app.get("/health", (_req, res) => {

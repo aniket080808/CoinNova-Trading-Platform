@@ -2,7 +2,10 @@ import { useAuthStore } from "./authStore";
 import { useDemoStore } from "./demoStore";
 import { useCurrencyStore } from "./currencyStore";
 
+import { type OrderItem } from "@/lib/api";
+
 export type Mode = "demo" | "live";
+
 
 export interface Holding {
   coinId: string;
@@ -65,6 +68,7 @@ export const useDemo = () => {
   const watchlist = isLive ? auth.watchlist : demo.watchlist;
   const alerts = isLive ? auth.alerts : demo.alerts;
   const notifications = isLive ? auth.notifications : demo.notifications;
+  const orders = isLive ? auth.orders : demo.orders;
 
   return {
     // Auth & Global
@@ -92,6 +96,7 @@ export const useDemo = () => {
     watchlist,
     alerts,
     notifications,
+    orders,
 
     // Actions (Unified)
     syncWallet: isLive ? auth.syncWallet : demo.syncWallet,
@@ -102,6 +107,9 @@ export const useDemo = () => {
     transferOut: isLive ? auth.transfer : demo.transferOut,
     buy: isLive ? auth.buy : demo.buy,
     sell: isLive ? auth.sell : demo.sell,
+    placeOrder: isLive ? auth.placeOrder : demo.placeOrder,
+    cancelOrder: isLive ? auth.cancelOrder : demo.cancelOrder,
+    checkDemoOrders: demo.checkOrders,
     toggleWatch: isLive ? auth.toggleWatch : demo.toggleWatch,
     addAlert: isLive ? auth.addAlert : demo.addAlert,
     removeAlert: isLive ? auth.removeAlert : demo.removeAlert,
@@ -117,6 +125,7 @@ export const useDemo = () => {
     hasOnboarded: true,
   };
 };
+
 
 // ─── Format helpers ─────────────────────────
 

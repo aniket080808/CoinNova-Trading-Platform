@@ -40,6 +40,7 @@ import {
   BarChart3,
   Trophy,
   ArrowRight,
+  Target,
 } from "lucide-react";
 import { usePrices } from "@/lib/binance";
 import { aiApi, tradesApi } from "@/lib/api";
@@ -50,8 +51,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { TradeDialog } from "@/components/trade/TradeDialog";
+import { OpenOrdersTable } from "@/components/trade/OpenOrdersTable";
 import { motion } from "framer-motion";
 import { clsx } from "clsx";
+
 
 const COLORS = [
   "hsl(142 76% 56%)",
@@ -395,12 +398,21 @@ const generateRecommendations = (metrics: any) => {
 
 // ─── Main Portfolio Page ──────────────────────────────────
 export default function Portfolio() {
-  const { holdings, walletUSD, transactions, mode } = useDemo();
+  const { holdings, walletUSD, transactions, orders = [], checkDemoOrders, mode } = useDemo();
   const { prices: livePrices } = usePrices();
   const { data: coins = [] } = useCoinsByIds(holdings.map((h) => h.coinId));
   const qc = useQueryClient();
 
+  const openOrdersCount = orders.filter((o) => o.status === "open").length;
+
+  useEffect(() => {
+    if (mode === "demo" && checkDemoOrders) {
+      checkDemoOrders(livePrices);
+    }
+  }, [livePrices, mode, checkDemoOrders]);
+
   const [performanceTimeframe, setPerformanceTimeframe] = useState<PerformanceTimeframe>("30d");
+
 
   // Health check query
   const { data: history = [] } = useQuery({
@@ -809,7 +821,17 @@ export default function Portfolio() {
               </Badge>
             )}
           </TabsTrigger>
+          <TabsTrigger value="orders" className="rounded-lg gap-2 text-xs md:text-sm font-medium">
+            <Target className="w-4 h-4" />
+            Orders & Limit
+            {openOrdersCount > 0 && (
+              <Badge className="ml-1 bg-amber-500/20 text-amber-400 border border-amber-500/30 text-[10px] px-1.5 py-0 h-4 font-mono">
+                {openOrdersCount}
+              </Badge>
+            )}
+          </TabsTrigger>
         </TabsList>
+
 
         {/* ════════════════════════════════════════════════════════════
             TAB 1: HOLDINGS & P&L TABLE
@@ -1440,7 +1462,16 @@ export default function Portfolio() {
             </div>
           )}
         </TabsContent>
+
+
+        {/* ════════════════════════════════════════════════════════════
+            TAB 4: ORDERS & HISTORY
+           ════════════════════════════════════════════════════════════ */}
+        <TabsContent value="orders" className="space-y-4">
+          <OpenOrdersTable />
+        </TabsContent>
       </Tabs>
     </div>
   );
 }
+

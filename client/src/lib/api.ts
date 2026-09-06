@@ -410,6 +410,44 @@ export const notificationsApi = {
     apiFetch<{ success: boolean }>("/notifications", { method: "DELETE" }),
 };
 
+// ─── Orders API (Limit & Stop-Loss) ──────────────────────
+export interface OrderItem {
+  id: string;
+  coinId: string;
+  symbol: string;
+  type: "limit" | "stop_loss" | "take_profit";
+  side: "buy" | "sell";
+  targetPrice: number;
+  amount: number;
+  total: number;
+  status: "open" | "filled" | "cancelled" | "expired";
+  filledPrice?: number | null;
+  reason?: string | null;
+  confidence?: number | null;
+  createdAt: number;
+  filledAt?: number | null;
+  cancelledAt?: number | null;
+}
+
+export const ordersApi = {
+  list: (status: "open" | "all" | "history" = "open") =>
+    apiFetch<{ orders: OrderItem[]; openCount: number }>(`/orders?status=${status}`),
+  create: (data: {
+    coinId: string;
+    symbol: string;
+    type: "limit" | "stop_loss" | "take_profit";
+    side: "buy" | "sell";
+    targetPrice: number;
+    amount: number;
+    pin?: string;
+    reason?: string;
+    confidence?: number;
+  }) => apiFetch<{ message: string; orderId: string }>("/orders", { method: "POST", body: data }),
+  cancel: (id: string) =>
+    apiFetch<{ message: string }>(`/orders/${id}`, { method: "DELETE" }),
+  check: () =>
+    apiFetch<{ filledCount: number }>("/orders/check", { method: "POST" }),
+};
 
 const api = {
   get: <T = any>(path: string) => apiFetch<T>(path, { method: "GET" }),
@@ -419,3 +457,4 @@ const api = {
 };
 
 export default api;
+
