@@ -435,28 +435,35 @@ export default function Portfolio() {
   const enriched = useMemo(() => {
     return holdings.map((h) => {
       const coin = coins.find((c) => c.id === h.coinId);
-      const livePrice =
+      const rawPrice =
         livePrices[h.symbol.toLowerCase()] ||
         livePrices[h.symbol.toUpperCase()] ||
         coin?.current_price ||
-        h.avgPrice;
-      const currentValue = h.amount * livePrice;
-      const costBasis = h.amount * h.avgPrice;
+        h.avgPrice ||
+        0;
+      const livePrice = Number.isFinite(rawPrice) && rawPrice > 0 ? rawPrice : (h.avgPrice || 0);
+      const safeAmount = Number.isFinite(h.amount) ? h.amount : 0;
+      const safeAvgPrice = Number.isFinite(h.avgPrice) ? h.avgPrice : 0;
+      const currentValue = safeAmount * livePrice;
+      const costBasis = safeAmount * safeAvgPrice;
       const unrealizedPnL = currentValue - costBasis;
       const unrealizedPnLPct = costBasis > 0 ? (unrealizedPnL / costBasis) * 100 : 0;
-      const change24h = coin?.price_change_percentage_24h ?? 0;
-      const change24hUSD = currentValue - currentValue / (1 + change24h / 100);
+      const rawChange24h = coin?.price_change_percentage_24h;
+      const change24h = Number.isFinite(rawChange24h) ? (rawChange24h as number) : 0;
+      const divisor = 1 + change24h / 100;
+      const safeDivisor = Math.abs(divisor) < 0.001 ? 1 : divisor;
+      const change24hUSD = currentValue - currentValue / safeDivisor;
 
       return {
         ...h,
         currentPrice: livePrice,
         coin,
-        currentValue,
-        costBasis,
-        unrealizedPnL,
-        unrealizedPnLPct,
+        currentValue: Number.isFinite(currentValue) ? currentValue : 0,
+        costBasis: Number.isFinite(costBasis) ? costBasis : 0,
+        unrealizedPnL: Number.isFinite(unrealizedPnL) ? unrealizedPnL : 0,
+        unrealizedPnLPct: Number.isFinite(unrealizedPnLPct) ? unrealizedPnLPct : 0,
         change24h,
-        change24hUSD,
+        change24hUSD: Number.isFinite(change24hUSD) ? change24hUSD : 0,
       };
     });
   }, [holdings, coins, livePrices]);
@@ -524,26 +531,32 @@ export default function Portfolio() {
 
   // ─── 5. Asset Allocation Pie Data ────────────────────────
   const pieData = useMemo(() => {
+    const safeWalletUSD = Number.isFinite(walletUSD) && walletUSD > 0 ? walletUSD : 0;
+    const safePortfolioVal = Number.isFinite(totalPortfolioValue) && totalPortfolioValue > 0 ? totalPortfolioValue : safeWalletUSD;
+
     return [
-      ...(walletUSD > 0
+      ...(safeWalletUSD > 0
         ? [
             {
               name: "USD Cash",
               symbol: "USD",
-              value: walletUSD,
-              pct: totalPortfolioValue > 0 ? (walletUSD / totalPortfolioValue) * 100 : 0,
+              value: safeWalletUSD,
+              pct: safePortfolioVal > 0 ? (safeWalletUSD / safePortfolioVal) * 100 : 0,
               color: "hsl(217 91% 60%)",
             },
           ]
         : []),
-      ...enriched.map((h, i) => ({
-        name: h.coin?.name || h.name || h.symbol.toUpperCase(),
-        symbol: h.symbol.toUpperCase(),
-        value: h.currentValue,
-        pct: totalPortfolioValue > 0 ? (h.currentValue / totalPortfolioValue) * 100 : 0,
-        color: COLORS[i % COLORS.length],
-      })),
-    ].filter((d) => d.value > 0);
+      ...enriched.map((h, i) => {
+        const val = Number.isFinite(h.currentValue) && h.currentValue > 0 ? h.currentValue : 0;
+        return {
+          name: h.coin?.name || h.name || h.symbol.toUpperCase(),
+          symbol: h.symbol.toUpperCase(),
+          value: val,
+          pct: safePortfolioVal > 0 ? (val / safePortfolioVal) * 100 : 0,
+          color: COLORS[i % COLORS.length],
+        };
+      }),
+    ].filter((d) => Number.isFinite(d.value) && d.value > 0);
   }, [walletUSD, enriched, totalPortfolioValue]);
 
   // ─── 6. Performance Valuation Time-Series ───────────────
@@ -561,9 +574,13 @@ export default function Portfolio() {
         : 48 * 3600 * 1000;
 
     const points = [];
+    const safeWalletUSD = Number.isFinite(walletUSD) ? walletUSD : 0;
+    const safePortfolioVal = Number.isFinite(totalPortfolioValue) && totalPortfolioValue > 0 ? totalPortfolioValue : safeWalletUSD;
+    const safeCostBasis = Number.isFinite(totalCostBasis) ? totalCostBasis : 0;
+    const safeHoldingsVal = Number.isFinite(totalHoldingsValue) ? totalHoldingsValue : 0;
 
     // Case 1: Zero crypto holdings (100% cash) -> Steady, flat valuation line at current net worth
-    if (enriched.length === 0 || totalHoldingsValue <= 0) {
+    if (enriched.length === 0 || safeHoldingsVal <= 0) {
       for (let i = pointsCount; i >= 0; i--) {
         const t = now - i * timeStep;
         const label =
@@ -573,7 +590,7 @@ export default function Portfolio() {
 
         points.push({
           time: label,
-          value: parseFloat(totalPortfolioValue.toFixed(2)),
+          value: parseFloat(safePortfolioVal.toFixed(2)),
           profit: 0,
         });
       }
@@ -581,18 +598,17 @@ export default function Portfolio() {
     }
 
     // Case 2: User holds crypto positions -> Calculate trajectory from actual holdings and price changes
-    const baselineCost = walletUSD + totalCostBasis;
+    const baselineCost = safeWalletUSD + safeCostBasis;
 
     for (let i = pointsCount; i >= 0; i--) {
       const t = now - i * timeStep;
       const progress = (pointsCount - i) / pointsCount; // 0 = oldest, 1 = current (now)
 
-      // Calculate total value of all holdings at this historical time point
       let historicalCryptoValue = 0;
       for (const h of enriched) {
         let pctChange = 0;
         if (performanceTimeframe === "24h") {
-          pctChange = h.change24h || 0;
+          pctChange = Number.isFinite(h.change24h) ? h.change24h : 0;
         } else if (performanceTimeframe === "7d") {
           pctChange =
             (h.coin as any)?.price_change_percentage_7d_in_currency ??
@@ -600,25 +616,27 @@ export default function Portfolio() {
             h.change24h ??
             0;
         } else {
-          // 30d / 90d / all: use 30d change or unrealized gain pct
           pctChange =
             (h.coin as any)?.price_change_percentage_30d ??
             (h.unrealizedPnLPct || 0);
         }
 
-        // Price at the start of the timeframe
-        const startPrice = h.currentPrice / (1 + pctChange / 100);
-        // Linear interpolation from startPrice to currentPrice
-        const trendPrice = startPrice + (h.currentPrice - startPrice) * progress;
-        // Subtle micro-variance that naturally anchors to 0 at endpoints (progress 0 and 1)
-        const dampener = Math.sin(progress * Math.PI); // 0 at ends, max in middle
-        const noise = Math.sin(i * 2.3 + h.symbol.charCodeAt(0)) * 0.004;
-        const estimatedPrice = i === 0 ? h.currentPrice : Math.max(0, trendPrice * (1 + dampener * noise));
+        const rawPct = Number.isFinite(pctChange) ? pctChange : 0;
+        const divisor = 1 + rawPct / 100;
+        const safeDivisor = Math.abs(divisor) < 0.001 ? 1 : divisor;
+        const curPrice = Number.isFinite(h.currentPrice) && h.currentPrice > 0 ? h.currentPrice : (h.avgPrice || 1);
+        const startPrice = curPrice / safeDivisor;
+        const trendPrice = startPrice + (curPrice - startPrice) * progress;
 
-        historicalCryptoValue += h.amount * estimatedPrice;
+        const dampener = Math.sin(progress * Math.PI);
+        const noise = Math.sin(i * 2.3 + (h.symbol?.charCodeAt(0) || 0)) * 0.004;
+        const estimatedPrice = i === 0 ? curPrice : Math.max(0, trendPrice * (1 + dampener * noise));
+        const safeAmount = Number.isFinite(h.amount) ? h.amount : 0;
+
+        historicalCryptoValue += safeAmount * (Number.isFinite(estimatedPrice) ? estimatedPrice : curPrice);
       }
 
-      const totalVal = i === 0 ? totalPortfolioValue : walletUSD + historicalCryptoValue;
+      const totalVal = i === 0 ? safePortfolioVal : safeWalletUSD + historicalCryptoValue;
       const profit = totalVal - baselineCost;
 
       const label =
@@ -626,15 +644,32 @@ export default function Portfolio() {
           ? new Date(t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
           : new Date(t).toLocaleDateString([], { month: "short", day: "numeric" });
 
+      const safeVal = Number.isFinite(totalVal) ? Math.max(0, totalVal) : safePortfolioVal;
+      const safeProfit = Number.isFinite(profit) ? profit : 0;
+
       points.push({
         time: label,
-        value: parseFloat(totalVal.toFixed(2)),
-        profit: parseFloat(profit.toFixed(2)),
+        value: parseFloat(safeVal.toFixed(2)),
+        profit: parseFloat(safeProfit.toFixed(2)),
       });
     }
 
     return points;
   }, [performanceTimeframe, totalPortfolioValue, totalHoldingsValue, totalCostBasis, walletUSD, enriched]);
+
+  // Guaranteed finite numeric domain for YAxis to prevent Recharts DecimalError NaN crashes
+  const yDomain = useMemo<[number, number]>(() => {
+    const values = performanceData.map((d) => d.value).filter((v) => Number.isFinite(v));
+    if (values.length === 0) return [0, 100];
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    if (!Number.isFinite(min) || !Number.isFinite(max)) return [0, 100];
+    if (min === max) {
+      return [Math.max(0, Math.floor(min * 0.95)), Math.ceil(max * 1.05) || 100];
+    }
+    const padding = (max - min) * 0.08;
+    return [Math.max(0, Math.floor(min - padding)), Math.ceil(max + padding)];
+  }, [performanceData]);
 
   // ─── 7. Health Check Handlers ────────────────────────────
   const handleAnalysis = async () => {
@@ -676,13 +711,16 @@ export default function Portfolio() {
   // Health trend chart points
   const chartData = useMemo(() => {
     if (!history?.length) return [];
-    return [...history].reverse().map((h: any, i: number) => ({
-      name: new Date(h.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric" }),
-      score: h.overallScore,
-      delta: i > 0 ? h.overallScore - history[history.length - i].overallScore : 0,
-      grade: generateGradeInfo(h.overallScore, h.categories).grade,
-      risk: h.overallScore >= 70 ? "Low" : h.overallScore >= 40 ? "Medium" : "High",
-    }));
+    return [...history]
+      .reverse()
+      .filter((h: any) => h && Number.isFinite(h.overallScore))
+      .map((h: any, i: number) => ({
+        name: new Date(h.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric" }),
+        score: Number(h.overallScore),
+        delta: i > 0 ? h.overallScore - history[history.length - i].overallScore : 0,
+        grade: generateGradeInfo(h.overallScore, h.categories).grade,
+        risk: h.overallScore >= 70 ? "Low" : h.overallScore >= 40 ? "Medium" : "High",
+      }));
   }, [history]);
 
   return (
@@ -1224,10 +1262,7 @@ export default function Portfolio() {
                       <YAxis
                         stroke="#ffffff40"
                         fontSize={11}
-                        domain={[
-                          (dataMin: number) => (totalHoldingsValue === 0 ? Math.max(0, Math.floor(dataMin * 0.95)) : "auto"),
-                          (dataMax: number) => (totalHoldingsValue === 0 ? Math.ceil(dataMax * 1.05) : "auto"),
-                        ]}
+                        domain={yDomain}
                         tickFormatter={(v) => `$${v >= 1000 ? (v / 1000).toFixed(1) + "k" : v}`}
                         width={50}
                       />

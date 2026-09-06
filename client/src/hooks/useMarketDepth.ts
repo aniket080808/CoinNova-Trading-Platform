@@ -86,6 +86,8 @@ export function useMarketDepth({ coinId, symbol }: UseMarketDepthProps) {
     const streamPair = pair.toLowerCase();
     const wsUrl = `wss://stream.binance.com:9443/stream?streams=${streamPair}@depth20@100ms/${streamPair}@trade`;
 
+    let retryAttempts = 0;
+
     function connect() {
       if (!isMounted) return;
 
@@ -94,7 +96,10 @@ export function useMarketDepth({ coinId, symbol }: UseMarketDepthProps) {
         wsRef.current = ws;
 
         ws.onopen = () => {
-          if (isMounted) setIsLive(true);
+          if (isMounted) {
+            setIsLive(true);
+            retryAttempts = 0;
+          }
         };
 
         ws.onmessage = (event) => {
@@ -107,15 +112,13 @@ export function useMarketDepth({ coinId, symbol }: UseMarketDepthProps) {
 
             // Depth Stream
             if (stream.includes("@depth20")) {
-              if (data.bids && data.asks) {
-                const parsedBids: [number, number][] = data.bids.map((b: [string, string]) => [
-                  parseFloat(b[0]),
-                  parseFloat(b[1]),
-                ]);
-                const parsedAsks: [number, number][] = data.asks.map((a: [string, string]) => [
-                  parseFloat(a[0]),
-                  parseFloat(a[1]),
-                ]);
+              if (Array.isArray(data.bids) && Array.isArray(data.asks)) {
+                const parsedBids: [number, number][] = data.bids
+                  .map((b: [string, string]) => [parseFloat(b[0]), parseFloat(b[1])] as [number, number])
+                  .filter(([p, a]: [number, number]) => Number.isFinite(p) && Number.isFinite(a) && p > 0);
+                const parsedAsks: [number, number][] = data.asks
+                  .map((a: [string, string]) => [parseFloat(a[0]), parseFloat(a[1])] as [number, number])
+                  .filter(([p, a]: [number, number]) => Number.isFinite(p) && Number.isFinite(a) && p > 0);
                 setBids(parsedBids);
                 setAsks(parsedAsks);
               }
@@ -124,10 +127,13 @@ export function useMarketDepth({ coinId, symbol }: UseMarketDepthProps) {
             // Trade Stream
             if (stream.includes("@trade")) {
               const newPrice = parseFloat(data.p);
+              const newAmount = parseFloat(data.q);
+              if (!Number.isFinite(newPrice) || newPrice <= 0) return;
+
               const newTrade: PublicMarketTrade = {
                 id: String(data.t || `${data.T}-${Math.random()}`),
                 price: newPrice,
-                amount: parseFloat(data.q),
+                amount: Number.isFinite(newAmount) ? newAmount : 0,
                 time: Number(data.T || Date.now()),
                 isBuyerMaker: Boolean(data.m),
               };
@@ -148,12 +154,17 @@ export function useMarketDepth({ coinId, symbol }: UseMarketDepthProps) {
         ws.onclose = () => {
           if (isMounted) {
             setIsLive(false);
-            reconnectTimeoutRef.current = setTimeout(connect, 3000);
+            retryAttempts++;
+            // Exponential backoff capped at 30 seconds, max 10 consecutive failed retries
+            if (retryAttempts <= 10) {
+              const delay = Math.min(3000 * Math.pow(1.5, retryAttempts - 1), 30000);
+              reconnectTimeoutRef.current = setTimeout(connect, delay);
+            }
           }
         };
 
         ws.onerror = () => {
-          ws.close();
+          try { ws.close(); } catch (_) {}
         };
       } catch (err) {
         console.warn("WebSocket init error:", err);

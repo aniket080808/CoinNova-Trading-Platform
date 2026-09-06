@@ -84,9 +84,26 @@ export default function CoinDetail() {
   const [limitTradeOpen, setLimitTradeOpen] = useState(false);
 
   const data = useMemo(
-    () => (chart?.prices ?? []).map(([t, p]) => ({ t, p, label: new Date(t).toLocaleDateString() })),
+    () =>
+      (chart?.prices ?? [])
+        .filter((item): item is [number, number] => Array.isArray(item) && Number.isFinite(item[0]) && Number.isFinite(item[1]))
+        .map(([t, p]) => ({ t, p, label: new Date(t).toLocaleDateString() })),
     [chart]
   );
+
+  const lineChartDomain = useMemo<[number, number]>(() => {
+    if (data.length === 0) return [0, 100];
+    const prices = data.map((d) => d.p).filter((p) => Number.isFinite(p));
+    if (prices.length === 0) return [0, 100];
+    const min = Math.min(...prices);
+    const max = Math.max(...prices);
+    if (!Number.isFinite(min) || !Number.isFinite(max)) return [0, 100];
+    if (min === max) {
+      return [Math.max(0, min * 0.95), max * 1.05 || 100];
+    }
+    const pad = (max - min) * 0.05;
+    return [Math.max(0, min - pad), max + pad];
+  }, [data]);
 
   const runAnalysis = async () => {
     if (!displayCoin || analyzing) return;
@@ -230,7 +247,7 @@ export default function CoinDetail() {
                     </linearGradient>
                   </defs>
                   <XAxis dataKey="label" hide />
-                  <YAxis domain={["dataMin", "dataMax"]} hide />
+                  <YAxis domain={lineChartDomain} hide />
                   <Tooltip
                     contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12 }}
                     formatter={(v: any) => formatUSD(v)}
