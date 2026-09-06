@@ -36,6 +36,33 @@ async function fetchWithCache(url: string, ttl = CACHE_TTL): Promise<any> {
   }
 }
 
+async function fetchTextWithCache(url: string, ttl = CACHE_TTL): Promise<string> {
+  const cached = cache.get(url);
+  if (cached && cached.expiry > Date.now() && typeof cached.data === "string") {
+    return cached.data;
+  }
+
+  try {
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "Accept": "application/rss+xml, application/xml, text/xml, */*",
+      },
+    });
+    if (!res.ok) {
+      if (cached && typeof cached.data === "string") return cached.data;
+      throw new Error(`HTTP ${res.status} from ${url}`);
+    }
+
+    const text = await res.text();
+    cache.set(url, { data: text, expiry: Date.now() + ttl });
+    return text;
+  } catch (err: any) {
+    if (cached && typeof cached.data === "string") return cached.data;
+    throw err;
+  }
+}
+
 // ── CoinPaprika ID Resolution ────────────────────────────────────────────
 // CoinPaprika uses IDs like "btc-bitcoin", CoinNova uses "bitcoin"
 // We build a mapping from all known CoinPaprika tickers on first load
@@ -629,6 +656,230 @@ router.get("/fear-greed", async (_req, res) => {
   } catch (err: any) {
     console.error("Fear & Greed fetch failed:", err.message);
     res.json({ value: 50, label: "Neutral", history: [] });
+  }
+});
+
+// ── News Fetcher & Sentiment Analysis ─────────────────────────────────
+interface CryptoNewsItem {
+  id: string;
+  title: string;
+  description: string;
+  url: string;
+  imageUrl: string;
+  source: string;
+  publishedAt: number;
+  sentiment: "bullish" | "bearish" | "neutral";
+  relatedCoins: string[];
+}
+
+function cleanHtml(text: string): string {
+  if (!text) return "";
+  return text
+    .replace(/<[^>]*>/g, "")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#039;/g, "'")
+    .replace(/&#39;/g, "'")
+    .replace(/&rsquo;/g, "'")
+    .replace(/&lsquo;/g, "'")
+    .replace(/&ldquo;/g, '"')
+    .replace(/&rdquo;/g, '"')
+    .replace(/&hellip;/g, "...")
+    .replace(/&ndash;/g, "-")
+    .replace(/&mdash;/g, "--")
+    .trim();
+}
+
+const BULLISH_WORDS = [
+  "surge", "soar", "rally", "jump", "gain", "ath", "all-time high", "breakout",
+  "approval", "inflow", "accumulate", "bull", "bullish", "bounce", "record",
+  "partner", "launch", "adopt", "upgrade", "outperform", "milestone", "skyrocket"
+];
+
+const BEARISH_WORDS = [
+  "crash", "plunge", "dump", "drop", "hack", "exploit", "ban", "sue", "lawsuit",
+  "outflow", "fraud", "scam", "bear", "bearish", "sink", "liquidat", "loss",
+  "down", "collapse", "decline", "warning", "penal", "stolen"
+];
+
+const KNOWN_COINS = [
+  { symbol: "BTC", keywords: ["bitcoin", "btc"] },
+  { symbol: "ETH", keywords: ["ethereum", "eth", "ether"] },
+  { symbol: "SOL", keywords: ["solana", "sol"] },
+  { symbol: "BNB", keywords: ["binance", "bnb"] },
+  { symbol: "XRP", keywords: ["ripple", "xrp"] },
+  { symbol: "DOGE", keywords: ["dogecoin", "doge"] },
+  { symbol: "ADA", keywords: ["cardano", "ada"] },
+  { symbol: "AVAX", keywords: ["avalanche", "avax"] },
+  { symbol: "LINK", keywords: ["chainlink", "link"] },
+  { symbol: "DOT", keywords: ["polkadot", "dot"] },
+  { symbol: "MATIC", keywords: ["polygon", "matic"] },
+  { symbol: "SHIB", keywords: ["shiba", "shib"] },
+];
+
+function analyzeSentiment(text: string): "bullish" | "bearish" | "neutral" {
+  const lower = text.toLowerCase();
+  let bullCount = 0;
+  let bearCount = 0;
+  for (const w of BULLISH_WORDS) {
+    if (lower.includes(w)) bullCount++;
+  }
+  for (const w of BEARISH_WORDS) {
+    if (lower.includes(w)) bearCount++;
+  }
+  if (bullCount > bearCount) return "bullish";
+  if (bearCount > bullCount) return "bearish";
+  return "neutral";
+}
+
+function detectCoins(text: string): string[] {
+  const lower = text.toLowerCase();
+  const matched = new Set<string>();
+  for (const coin of KNOWN_COINS) {
+    for (const kw of coin.keywords) {
+      const regex = new RegExp(`\\b${kw}\\b`, "i");
+      if (regex.test(lower)) {
+        matched.add(coin.symbol);
+        break;
+      }
+    }
+  }
+  return Array.from(matched);
+}
+
+async function fetchCryptoNews(): Promise<CryptoNewsItem[]> {
+  const allNews: CryptoNewsItem[] = [];
+
+  // 1. Fetch CoinTelegraph RSS
+  try {
+    const ctXml = await fetchTextWithCache("https://cointelegraph.com/rss", 5 * 60 * 1000);
+    if (ctXml) {
+      const items = ctXml.match(/<item>[\s\S]*?<\/item>/g) || [];
+      for (const item of items) {
+        const titleMatch = item.match(/<title><!\[CDATA\[(.*?)\]\]><\/title>/s) || item.match(/<title>(.*?)<\/title>/s);
+        const title = cleanHtml(titleMatch?.[1] || "");
+        if (!title) continue;
+
+        const linkMatch = item.match(/<link><!\[CDATA\[(.*?)\]\]><\/link>/s) || item.match(/<link>(.*?)<\/link>/s);
+        const url = (linkMatch?.[1] || "").split("?")[0];
+
+        const dateMatch = item.match(/<pubDate>(.*?)<\/pubDate>/s);
+        const publishedAt = dateMatch ? new Date(dateMatch[1]).getTime() : Date.now();
+
+        const descMatch = item.match(/<description><!\[CDATA\[(.*?)\]\]><\/description>/s) || item.match(/<description>(.*?)<\/description>/s);
+        const rawDesc = descMatch?.[1] || "";
+        const imgMatch = rawDesc.match(/src="(https:\/\/[^">]+)"/);
+        const imageUrl = imgMatch ? imgMatch[1] : "";
+        const description = cleanHtml(rawDesc);
+
+        const sentiment = analyzeSentiment(title + " " + description);
+        const relatedCoins = detectCoins(title + " " + description);
+
+        allNews.push({
+          id: `ct-${Buffer.from(url || title).toString("base64").slice(0, 16)}`,
+          title,
+          description: description.slice(0, 240),
+          url,
+          imageUrl: imageUrl || "https://images.unsplash.com/photo-1621416894569-0f39ed31d247?w=600&auto=format&fit=crop&q=80",
+          source: "CoinTelegraph",
+          publishedAt,
+          sentiment,
+          relatedCoins,
+        });
+      }
+    }
+  } catch (err: any) {
+    console.warn("CoinTelegraph RSS failed:", err.message);
+  }
+
+  // 2. Fetch Decrypt RSS
+  try {
+    const dcXml = await fetchTextWithCache("https://decrypt.co/feed", 5 * 60 * 1000);
+    if (dcXml) {
+      const items = dcXml.match(/<item>[\s\S]*?<\/item>/g) || [];
+      for (const item of items) {
+        const titleMatch = item.match(/<title><!\[CDATA\[(.*?)\]\]><\/title>/s) || item.match(/<title>(.*?)<\/title>/s);
+        const title = cleanHtml(titleMatch?.[1] || "");
+        if (!title) continue;
+
+        const linkMatch = item.match(/<link><!\[CDATA\[(.*?)\]\]><\/link>/s) || item.match(/<link>(.*?)<\/link>/s);
+        const url = linkMatch?.[1] || "";
+
+        const dateMatch = item.match(/<pubDate>(.*?)<\/pubDate>/s);
+        const publishedAt = dateMatch ? new Date(dateMatch[1]).getTime() : Date.now();
+
+        const descMatch = item.match(/<description><!\[CDATA\[(.*?)\]\]><\/description>/s) || item.match(/<description>(.*?)<\/description>/s);
+        const description = cleanHtml(descMatch?.[1] || "");
+
+        const imgMatch = item.match(/url="(https:\/\/[^">]+)"/);
+        const imageUrl = imgMatch ? imgMatch[1] : "";
+
+        const sentiment = analyzeSentiment(title + " " + description);
+        const relatedCoins = detectCoins(title + " " + description);
+
+        allNews.push({
+          id: `dc-${Buffer.from(url || title).toString("base64").slice(0, 16)}`,
+          title,
+          description: description.slice(0, 240),
+          url,
+          imageUrl: imageUrl || "https://images.unsplash.com/photo-1639762681485-074b7f938ba0?w=600&auto=format&fit=crop&q=80",
+          source: "Decrypt",
+          publishedAt,
+          sentiment,
+          relatedCoins,
+        });
+      }
+    }
+  } catch (err: any) {
+    console.warn("Decrypt RSS failed:", err.message);
+  }
+
+  return allNews.sort((a, b) => b.publishedAt - a.publishedAt);
+}
+
+// GET /coins/news — Crypto News Feed with Sentiment
+router.get("/news", async (req, res) => {
+  try {
+    const { coin, category, limit = 30 } = req.query;
+    const numLimit = Math.min(Number(limit) || 30, 50);
+
+    const allArticles = await fetchCryptoNews();
+
+    let filtered = allArticles;
+
+    // Filter by coin (symbol or name)
+    if (coin && typeof coin === "string" && coin !== "all") {
+      const q = coin.toLowerCase();
+      filtered = filtered.filter(
+        (a) =>
+          a.relatedCoins.some((c) => c.toLowerCase() === q) ||
+          a.title.toLowerCase().includes(q) ||
+          a.description.toLowerCase().includes(q)
+      );
+    }
+
+    // Filter by category / sentiment
+    if (category && typeof category === "string") {
+      const cat = category.toLowerCase();
+      if (cat === "bullish" || cat === "bearish") {
+        filtered = filtered.filter((a) => a.sentiment === cat);
+      }
+    }
+
+    res.json({
+      news: filtered.slice(0, numLimit),
+      total: filtered.length,
+      sentimentSummary: {
+        bullish: filtered.filter((a) => a.sentiment === "bullish").length,
+        bearish: filtered.filter((a) => a.sentiment === "bearish").length,
+        neutral: filtered.filter((a) => a.sentiment === "neutral").length,
+      },
+    });
+  } catch (err: any) {
+    console.error("News fetch failed:", err.message);
+    res.status(500).json({ error: "Failed to fetch crypto news" });
   }
 });
 

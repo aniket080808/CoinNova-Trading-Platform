@@ -6,12 +6,14 @@ import { Badge } from "@/components/ui/badge";
 import { useDemo, formatUSD, formatPct, formatNum } from "@/store/demo";
 import { TradeDialog } from "@/components/trade/TradeDialog";
 import { RiskBadge, riskFor } from "@/components/ai/RiskBadge";
-import { Star, ArrowLeft, Sparkles, Loader2, AlertCircle, BarChart3, TrendingUp } from "lucide-react";
+import { Star, ArrowLeft, Sparkles, Loader2, AlertCircle, BarChart3, TrendingUp, Newspaper } from "lucide-react";
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { useMemo, useState, useEffect } from "react";
 import { aiApi } from "@/lib/api";
 import { toast } from "sonner";
 import { CandlestickChart } from "@/components/charts/CandlestickChart";
+import { CryptoNewsFeed } from "@/components/news/CryptoNewsFeed";
+
 
 import { usePrices } from "@/lib/binance";
 
@@ -295,9 +297,21 @@ export default function CoinDetail() {
           <p className="text-sm text-muted-foreground line-clamp-6" dangerouslySetInnerHTML={{ __html: displayCoin.description.en.split(". ").slice(0, 4).join(". ") }} />
         </GlassCard>
       )}
+
+      {/* Live Coin News & Sentiment */}
+      <div className="space-y-3 pt-2">
+        <div className="flex items-center gap-2">
+          <div className="p-1.5 rounded-lg bg-primary/10 text-primary">
+            <Newspaper className="w-4 h-4" />
+          </div>
+          <h3 className="text-base font-semibold">{displayCoin.name} News & Sentiment</h3>
+        </div>
+        <CryptoNewsFeed coinSymbol={displayCoin.symbol} coinName={displayCoin.name} limit={12} />
+      </div>
     </div>
   );
 }
+
 
 const Stat = ({ k, v }: { k: string; v: string }) => (
   <div className="flex justify-between border-b border-border/40 py-1.5 last:border-0">

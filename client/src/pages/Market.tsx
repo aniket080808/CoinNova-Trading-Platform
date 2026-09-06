@@ -6,11 +6,15 @@ import { Input } from "@/components/ui/input";
 import {
   Star, Search, TrendingUp, TrendingDown, Globe, Activity,
   BarChart3, Flame, ArrowUpRight, ArrowDownRight, ChevronRight, Zap,
+  Newspaper, Coins,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useMemo, useState } from "react";
 import { usePrices } from "@/lib/binance";
 import { motion, AnimatePresence } from "framer-motion";
+import { BreakingNewsTicker } from "@/components/news/BreakingNewsTicker";
+import { CryptoNewsFeed } from "@/components/news/CryptoNewsFeed";
+
 
 // ─── Category definitions ────────────────────────────────
 const CATEGORIES = [
@@ -183,6 +187,7 @@ export default function Market() {
   const [sort, setSort] = useState<SortKey>("rank");
   const [category, setCategory] = useState("all");
   const [showAll, setShowAll] = useState(false);
+  const [activeView, setActiveView] = useState<"coins" | "news">("coins");
 
   const trendingCoins = trendingData?.coins?.map((c: any) => c.item) ?? [];
 
@@ -231,6 +236,9 @@ export default function Market() {
 
       {/* Global Stats Ticker */}
       <GlobalStatsBar />
+
+      {/* Breaking News Live Ticker */}
+      <BreakingNewsTicker />
 
       {/* Top Section: Fear & Greed + Gainers + Losers */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
@@ -295,181 +303,224 @@ export default function Market() {
         </div>
       )}
 
-      {/* Search + Category Tabs + Sort */}
-      <GlassCard className="p-4">
-        <div className="flex gap-3 items-center flex-wrap">
-          {/* Search */}
-          <div className="relative flex-1 min-w-[200px]">
-            <Search className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
-            <Input
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="Search by name, symbol, or ID…"
-              className="pl-9 bg-muted/30"
-            />
-          </div>
+      {/* View Switcher: Coins vs Live News */}
+      <div className="flex items-center justify-between border-b border-border/40 pb-2">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setActiveView("coins")}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all ${
+              activeView === "coins"
+                ? "bg-primary text-background shadow-md shadow-primary/20"
+                : "text-muted-foreground hover:text-foreground hover:bg-secondary/40"
+            }`}
+          >
+            <Coins className="w-4 h-4" />
+            <span>Market Assets</span>
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-secondary/80 text-foreground font-mono">
+              {list.length}
+            </span>
+          </button>
 
-          {/* Category Tabs */}
-          <div className="flex gap-1 glass rounded-full p-1 text-xs">
-            {CATEGORIES.map((cat) => (
-              <button
-                key={cat.id}
-                onClick={() => setCategory(cat.id)}
-                className={`px-3 py-1.5 rounded-full transition-all flex items-center gap-1.5 ${
-                  category === cat.id
-                    ? "bg-primary text-background font-semibold shadow-lg shadow-primary/25"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                <cat.icon className="w-3 h-3" />
-                {cat.label}
-              </button>
-            ))}
-          </div>
-
-          {/* Sort */}
-          <div className="flex gap-1 glass rounded-full p-1 text-xs">
-            {([
-              { key: "rank", label: "Rank" },
-              { key: "gain", label: "Gainers" },
-              { key: "loss", label: "Losers" },
-              { key: "vol", label: "Volume" },
-              { key: "cap", label: "MCap" },
-            ] as { key: SortKey; label: string }[]).map((s) => (
-              <button
-                key={s.key}
-                onClick={() => setSort(s.key)}
-                className={`px-3 py-1.5 rounded-full transition-all ${
-                  sort === s.key
-                    ? "bg-secondary/80 text-background font-semibold"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                {s.label}
-              </button>
-            ))}
-          </div>
+          <button
+            onClick={() => setActiveView("news")}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all ${
+              activeView === "news"
+                ? "bg-primary text-background shadow-md shadow-primary/20"
+                : "text-muted-foreground hover:text-foreground hover:bg-secondary/40"
+            }`}
+          >
+            <Newspaper className="w-4 h-4" />
+            <span>Live News & Sentiment</span>
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+            </span>
+          </button>
         </div>
-      </GlassCard>
+      </div>
 
-      {/* Coin Table */}
-      <GlassCard className="p-0 overflow-hidden">
-        {/* Table Header */}
-        <div className="hidden md:grid grid-cols-12 px-4 py-3 text-[11px] uppercase tracking-wider text-muted-foreground border-b border-border/40 font-medium">
-          <div className="col-span-1">#</div>
-          <div className="col-span-3">Coin</div>
-          <div className="col-span-2 text-right">Price</div>
-          <div className="col-span-1 text-right">1h</div>
-          <div className="col-span-1 text-right">24h</div>
-          <div className="col-span-2 text-right">Volume (24h)</div>
-          <div className="col-span-2 text-right">7d Chart</div>
-        </div>
+      {activeView === "news" ? (
+        <CryptoNewsFeed />
+      ) : (
+        <>
+          {/* Search + Category Tabs + Sort */}
+          <GlassCard className="p-4">
+            <div className="flex gap-3 items-center flex-wrap">
+              {/* Search */}
+              <div className="relative flex-1 min-w-[200px]">
+                <Search className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
+                <Input
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  placeholder="Search by name, symbol, or ID…"
+                  className="pl-9 bg-muted/30"
+                />
+              </div>
 
-        {/* Table Body */}
-        <div className="divide-y divide-border/40">
-          {isLoading && (
-            <div className="p-8 text-center text-muted-foreground">
-              <div className="inline-flex items-center gap-2">
-                <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                Loading markets…
+              {/* Category Tabs */}
+              <div className="flex gap-1 glass rounded-full p-1 text-xs">
+                {CATEGORIES.map((cat) => (
+                  <button
+                    key={cat.id}
+                    onClick={() => setCategory(cat.id)}
+                    className={`px-3 py-1.5 rounded-full transition-all flex items-center gap-1.5 ${
+                      category === cat.id
+                        ? "bg-primary text-background font-semibold shadow-lg shadow-primary/25"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    <cat.icon className="w-3 h-3" />
+                    {cat.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Sort */}
+              <div className="flex gap-1 glass rounded-full p-1 text-xs">
+                {([
+                  { key: "rank", label: "Rank" },
+                  { key: "gain", label: "Gainers" },
+                  { key: "loss", label: "Losers" },
+                  { key: "vol", label: "Volume" },
+                  { key: "cap", label: "MCap" },
+                ] as { key: SortKey; label: string }[]).map((s) => (
+                  <button
+                    key={s.key}
+                    onClick={() => setSort(s.key)}
+                    className={`px-3 py-1.5 rounded-full transition-all ${
+                      sort === s.key
+                        ? "bg-secondary/80 text-background font-semibold"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {s.label}
+                  </button>
+                ))}
               </div>
             </div>
-          )}
-          {!isLoading && list.length === 0 && (
-            <div className="p-8 text-center text-muted-foreground">
-              No coins found for "{q || category}"
+          </GlassCard>
+
+          {/* Coin Table */}
+          <GlassCard className="p-0 overflow-hidden">
+            {/* Table Header */}
+            <div className="hidden md:grid grid-cols-12 px-4 py-3 text-[11px] uppercase tracking-wider text-muted-foreground border-b border-border/40 font-medium">
+              <div className="col-span-1">#</div>
+              <div className="col-span-3">Coin</div>
+              <div className="col-span-2 text-right">Price</div>
+              <div className="col-span-1 text-right">1h</div>
+              <div className="col-span-1 text-right">24h</div>
+              <div className="col-span-2 text-right">Volume (24h)</div>
+              <div className="col-span-2 text-right">7d Chart</div>
             </div>
-          )}
-          <AnimatePresence>
-            {displayedList.map((c, idx) => {
-              const lp = livePrices[c.symbol.toLowerCase()];
-              const change1h = c.price_change_percentage_1h_in_currency ?? 0;
-              const change24h = c.price_change_percentage_24h ?? 0;
 
-              return (
-                <motion.div
-                  key={c.id}
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ delay: idx < 20 ? idx * 0.02 : 0 }}
-                  className="grid grid-cols-2 md:grid-cols-12 gap-2 px-4 py-3 items-center hover:bg-primary/5 transition-all group"
-                >
-                  {/* Rank */}
-                  <div className="hidden md:block col-span-1 text-xs text-muted-foreground">{c.market_cap_rank}</div>
+            {/* Table Body */}
+            <div className="divide-y divide-border/40">
+              {isLoading && (
+                <div className="p-8 text-center text-muted-foreground">
+                  <div className="inline-flex items-center gap-2">
+                    <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                    Loading markets…
+                  </div>
+                </div>
+              )}
+              {!isLoading && list.length === 0 && (
+                <div className="p-8 text-center text-muted-foreground">
+                  No coins found for "{q || category}"
+                </div>
+              )}
+              <AnimatePresence>
+                {displayedList.map((c, idx) => {
+                  const lp = livePrices[c.symbol.toLowerCase()];
+                  const change1h = c.price_change_percentage_1h_in_currency ?? 0;
+                  const change24h = c.price_change_percentage_24h ?? 0;
 
-                  {/* Coin Info */}
-                  <div className="col-span-1 md:col-span-3 flex items-center gap-3 min-w-0">
-                    <button onClick={() => toggleWatch(c.id)} aria-label="Toggle watchlist" className="shrink-0">
-                      <Star className={`w-4 h-4 transition-all ${watchlist.includes(c.id) ? "fill-primary text-primary" : "text-muted-foreground hover:text-primary/60"}`} />
-                    </button>
-                    <Link to={`/coin/${c.id}`} className="flex items-center gap-2 min-w-0 group/link">
-                      <img src={c.image} alt="" className="w-7 h-7 rounded-full shrink-0" loading="lazy" />
-                      <div className="min-w-0">
-                        <div className="text-sm font-medium truncate group-hover/link:text-primary transition-colors">{c.name}</div>
-                        <div className="text-[10px] text-muted-foreground uppercase">{c.symbol}</div>
+                  return (
+                    <motion.div
+                      key={c.id}
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      transition={{ delay: idx < 20 ? idx * 0.02 : 0 }}
+                      className="grid grid-cols-2 md:grid-cols-12 gap-2 px-4 py-3 items-center hover:bg-primary/5 transition-all group"
+                    >
+                      {/* Rank */}
+                      <div className="hidden md:block col-span-1 text-xs text-muted-foreground">{c.market_cap_rank}</div>
+
+                      {/* Coin Info */}
+                      <div className="col-span-1 md:col-span-3 flex items-center gap-3 min-w-0">
+                        <button onClick={() => toggleWatch(c.id)} aria-label="Toggle watchlist" className="shrink-0">
+                          <Star className={`w-4 h-4 transition-all ${watchlist.includes(c.id) ? "fill-primary text-primary" : "text-muted-foreground hover:text-primary/60"}`} />
+                        </button>
+                        <Link to={`/coin/${c.id}`} className="flex items-center gap-2 min-w-0 group/link">
+                          <img src={c.image} alt="" className="w-7 h-7 rounded-full shrink-0" loading="lazy" />
+                          <div className="min-w-0">
+                            <div className="text-sm font-medium truncate group-hover/link:text-primary transition-colors">{c.name}</div>
+                            <div className="text-[10px] text-muted-foreground uppercase">{c.symbol}</div>
+                          </div>
+                        </Link>
                       </div>
-                    </Link>
-                  </div>
 
-                  {/* Price */}
-                  <div className="col-span-1 md:col-span-2 text-right text-sm font-semibold">
-                    <span className={lp ? "text-primary" : ""}>
-                      {formatUSD(lp ?? c.current_price)}
-                    </span>
-                  </div>
+                      {/* Price */}
+                      <div className="col-span-1 md:col-span-2 text-right text-sm font-semibold">
+                        <span className={lp ? "text-primary" : ""}>
+                          {formatUSD(lp ?? c.current_price)}
+                        </span>
+                      </div>
 
-                  {/* 1h Change */}
-                  <div className={`hidden md:block col-span-1 text-right text-xs font-medium ${change1h >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-                    {formatPct(change1h)}
-                  </div>
+                      {/* 1h Change */}
+                      <div className={`hidden md:block col-span-1 text-right text-xs font-medium ${change1h >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                        {formatPct(change1h)}
+                      </div>
 
-                  {/* 24h Change */}
-                  <div className={`col-span-1 md:col-span-1 text-right text-xs font-medium ${change24h >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-                    <span className={`inline-flex items-center gap-0.5 ${change24h >= 0 ? "bg-emerald-500/10 text-emerald-400" : "bg-red-500/10 text-red-400"} px-1.5 py-0.5 rounded-md`}>
-                      {change24h >= 0 ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
-                      {formatPct(change24h)}
-                    </span>
-                  </div>
+                      {/* 24h Change */}
+                      <div className={`col-span-1 md:col-span-1 text-right text-xs font-medium ${change24h >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                        <span className={`inline-flex items-center gap-0.5 ${change24h >= 0 ? "bg-emerald-500/10 text-emerald-400" : "bg-red-500/10 text-red-400"} px-1.5 py-0.5 rounded-md`}>
+                          {change24h >= 0 ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
+                          {formatPct(change24h)}
+                        </span>
+                      </div>
 
-                  {/* Volume */}
-                  <div className="hidden md:block col-span-2 text-right text-xs text-muted-foreground">
-                    ${formatNum(c.total_volume / 1e6, 1)}M
-                  </div>
+                      {/* Volume */}
+                      <div className="hidden md:block col-span-2 text-right text-xs text-muted-foreground">
+                        ${formatNum(c.total_volume / 1e6, 1)}M
+                      </div>
 
-                  {/* 7d Sparkline */}
-                  <div className="hidden md:block col-span-2 h-10">
-                    {c.sparkline_in_7d?.price?.length ? (
-                      <Sparkline
-                        data={c.sparkline_in_7d.price}
-                        color={(c.price_change_percentage_7d_in_currency ?? 0) >= 0 ? "hsl(142, 76%, 56%)" : "hsl(0, 84%, 65%)"}
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-[10px] text-muted-foreground/50">—</div>
-                    )}
-                  </div>
-                </motion.div>
-              );
-            })}
-          </AnimatePresence>
-        </div>
+                      {/* 7d Sparkline */}
+                      <div className="hidden md:block col-span-2 h-10">
+                        {c.sparkline_in_7d?.price?.length ? (
+                          <Sparkline
+                            data={c.sparkline_in_7d.price}
+                            color={(c.price_change_percentage_7d_in_currency ?? 0) >= 0 ? "hsl(142, 76%, 56%)" : "hsl(0, 84%, 65%)"}
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-[10px] text-muted-foreground/50">—</div>
+                        )}
+                      </div>
+                    </motion.div>
+                  );
+                })}
+              </AnimatePresence>
+            </div>
 
-        {/* Show More / Load More */}
-        {!showAll && list.length > 50 && (
-          <button
-            onClick={() => setShowAll(true)}
-            className="w-full py-3 text-sm text-primary hover:bg-primary/5 transition-all flex items-center justify-center gap-1 border-t border-border/40"
-          >
-            Show all {list.length} coins
-            <ChevronRight className="w-4 h-4" />
-          </button>
-        )}
-      </GlassCard>
+            {/* Show More / Load More */}
+            {!showAll && list.length > 50 && (
+              <button
+                onClick={() => setShowAll(true)}
+                className="w-full py-3 text-sm text-primary hover:bg-primary/5 transition-all flex items-center justify-center gap-1 border-t border-border/40"
+              >
+                Show all {list.length} coins
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            )}
+          </GlassCard>
 
-      {/* Results count */}
-      <div className="text-center text-xs text-muted-foreground pb-4">
-        Showing {displayedList.length} of {list.length} coins
-        {category !== "all" && ` in ${CATEGORIES.find(c => c.id === category)?.label}`}
-      </div>
+          {/* Results count */}
+          <div className="text-center text-xs text-muted-foreground pb-4">
+            Showing {displayedList.length} of {list.length} coins
+            {category !== "all" && ` in ${CATEGORIES.find(c => c.id === category)?.label}`}
+          </div>
+        </>
+      )}
     </div>
   );
 }
+

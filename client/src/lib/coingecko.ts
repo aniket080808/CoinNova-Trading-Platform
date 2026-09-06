@@ -169,3 +169,50 @@ export const useFearGreed = () =>
     refetchInterval: 5 * 60_000,
   });
 
+export interface CryptoNewsItem {
+  id: string;
+  title: string;
+  description: string;
+  url: string;
+  imageUrl: string;
+  source: string;
+  publishedAt: number;
+  sentiment: "bullish" | "bearish" | "neutral";
+  relatedCoins: string[];
+}
+
+export interface CryptoNewsResponse {
+  news: CryptoNewsItem[];
+  total: number;
+  sentimentSummary: {
+    bullish: number;
+    bearish: number;
+    neutral: number;
+  };
+}
+
+export const fetchNews = async (
+  coin?: string,
+  category?: string,
+  limit = 30
+): Promise<CryptoNewsResponse> => {
+  const params = new URLSearchParams();
+  if (coin && coin !== "all") params.set("coin", coin);
+  if (category && category !== "all") params.set("category", category);
+  if (limit) params.set("limit", limit.toString());
+
+  const r = await fetch(`${API}/news?${params.toString()}`);
+  if (!r.ok) throw new Error("Failed to fetch news");
+  return r.json();
+};
+
+export const useNews = (coin?: string, category?: string, limit = 30) => {
+  return useQuery({
+    queryKey: ["crypto-news", coin, category, limit],
+    queryFn: () => fetchNews(coin, category, limit),
+    staleTime: 2 * 60_000,
+    refetchInterval: 3 * 60_000,
+  });
+};
+
+
