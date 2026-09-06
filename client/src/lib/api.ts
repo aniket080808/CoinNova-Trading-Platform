@@ -72,16 +72,29 @@ export async function apiFetch<T = any>(path: string, opts: ApiOptions = {}): Pr
     body: body ? JSON.stringify(body) : undefined,
   });
 
+  const data = await res.json().catch(() => ({}));
+
   if (res.status === 401) {
+    // If this was an explicit auth endpoint (login, register, verify, etc.) or skipAuth is set:
+    // This is an invalid credentials or validation error, NOT an expired session!
+    const isAuthRoute =
+      skipAuth ||
+      path.startsWith("/auth/login") ||
+      path.startsWith("/auth/register") ||
+      path.startsWith("/auth/verify") ||
+      path.startsWith("/auth/reset");
+
+    if (isAuthRoute) {
+      throw new ApiError(data.error ?? "Invalid credentials", 401, data.details);
+    }
+
     clearToken();
     // Redirect to login if not already there
     if (!window.location.pathname.startsWith("/login")) {
       window.location.href = "/login";
     }
-    throw new ApiError("Session expired", 401);
+    throw new ApiError(data.error ?? "Session expired. Please sign in again.", 401, data.details);
   }
-
-  const data = await res.json().catch(() => ({}));
 
   if (!res.ok) {
     throw new ApiError(data.error ?? "Request failed", res.status, data.details);

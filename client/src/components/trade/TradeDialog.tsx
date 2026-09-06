@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger
 } from "@/components/ui/dialog";
@@ -71,18 +71,28 @@ export const TradeDialog = ({
 
   const { rate } = useCurrencyStore.getState();
 
-  // Reset or preset target price when dialog opens
+  const prevOpenRef = useRef(false);
+  const prevTargetPriceRef = useRef<number | undefined>(initialTargetPrice);
+
+  // Initialize orderType and targetPrice ONLY on dialog open transition or new external prop
   useEffect(() => {
-    if (open) {
+    const justOpened = open && !prevOpenRef.current;
+    const newTargetSelected = open && initialTargetPrice !== undefined && initialTargetPrice !== prevTargetPriceRef.current;
+
+    if (justOpened || newTargetSelected) {
       if (initialTargetPrice) {
         setTargetPrice(initialTargetPrice.toString());
         setOrderType(initialOrderType || "limit");
-      } else {
-        setTargetPrice(currentPrice.toFixed(currentPrice < 1 ? 4 : 2));
+      } else if (justOpened) {
+        const safePrice = Number.isFinite(currentPrice) && currentPrice > 0 ? currentPrice : (coin.current_price || 0);
+        setTargetPrice(safePrice > 0 ? safePrice.toFixed(safePrice < 1 ? 4 : 2) : "");
         setOrderType(initialOrderType || "market");
       }
     }
-  }, [open, currentPrice, initialTargetPrice, initialOrderType]);
+
+    prevOpenRef.current = open;
+    prevTargetPriceRef.current = initialTargetPrice;
+  }, [open, initialTargetPrice, initialOrderType]);
 
   const executeBuy = async (amountInUsd: number, pin: string | undefined) => {
     setBusy(true);
@@ -290,7 +300,14 @@ export const TradeDialog = ({
             </DialogDescription>
           </DialogHeader>
 
-          <Tabs defaultValue={defaultTab}>
+          <Tabs
+            defaultValue={defaultTab}
+            onValueChange={(val) => {
+              if (val === "buy" && orderType === "stop_loss") {
+                setOrderType("market");
+              }
+            }}
+          >
             <TabsList className="grid grid-cols-2 w-full mb-3">
               <TabsTrigger value="buy">Buy</TabsTrigger>
               <TabsTrigger value="sell">Sell</TabsTrigger>

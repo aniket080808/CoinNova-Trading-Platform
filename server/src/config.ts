@@ -29,7 +29,7 @@ export const config = {
 
   // Auth
   jwtSecret: env("JWT_SECRET"),
-  jwtExpiresIn: env("JWT_EXPIRES_IN", "7d"),
+  jwtExpiresIn: env("JWT_EXPIRES_IN", "30d"),
   adminEmail: env("ADMIN_EMAIL", "admin@gmail.com"),
   adminPassword: env("ADMIN_PASSWORD", "Admin123@"),
   adminId: "00000000-0000-0000-0000-000000000000",
