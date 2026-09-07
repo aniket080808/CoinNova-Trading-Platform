@@ -54,7 +54,7 @@ export default function Transfer() {
         </div>
         <div className="space-y-2">
           <Label>Recipient (email or wallet ID)</Label>
-          <Input value={dest} onChange={(e) => setDest(e.target.value)} placeholder="alice@coinnova.io" />
+          <Input value={dest} onChange={(e) => setDest(e.target.value)} placeholder="recipient@email.com" />
         </div>
         <div className="space-y-2">
           <Label>Amount (USD)</Label>

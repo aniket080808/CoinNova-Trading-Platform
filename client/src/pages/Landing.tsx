@@ -20,7 +20,7 @@ import {
   ArrowRight, Bot, Shield, Wallet, TrendingUp, Bell,
   Sparkles, Zap, Lock, Play, CheckCircle2, Gift,
   Smartphone, Activity, BarChart3, Share2, Layers, DollarSign,
-  Copy, Check, ShieldCheck, HelpCircle, Star, ArrowUpRight
+  Copy, Check, ShieldCheck, HelpCircle, Star, ArrowUpRight, LogIn
 } from "lucide-react";
 import {
   Accordion, AccordionContent, AccordionItem, AccordionTrigger
@@ -174,12 +174,24 @@ export default function Landing() {
               <Button 
                 onClick={enterDemo} 
                 size="lg" 
-                className="bg-gradient-neon text-background hover:opacity-95 shadow-glow-primary text-base h-13 px-8 font-bold rounded-2xl transition-all duration-300 transform hover:-translate-y-0.5"
+                className="group relative overflow-hidden h-12 sm:h-13 px-7 sm:px-8 font-bold text-sm sm:text-base text-slate-950 bg-gradient-to-r from-emerald-400 via-teal-300 to-emerald-400 hover:from-emerald-300 hover:via-teal-200 hover:to-emerald-300 shadow-xl shadow-emerald-500/25 hover:shadow-emerald-500/40 rounded-2xl transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
               >
-                Start Free with {formatUSD(100000)} <ArrowRight className="w-4 h-4 ml-2" />
+                <span className="flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-emerald-950/80" />
+                  <span>Start Free with {currency === "INR" ? "₹95L Demo" : "$100K Demo"}</span>
+                  <ArrowRight className="w-4 h-4 ml-0.5 group-hover:translate-x-1 transition-transform" />
+                </span>
               </Button>
-              <Button asChild size="lg" variant="outline" className="h-13 px-7 glass border-border/60 font-semibold rounded-2xl hover:border-primary/40">
-                <Link to="/login"><Play className="w-4 h-4 mr-2 text-primary" /> Login to Account</Link>
+
+              <Button 
+                asChild 
+                size="lg" 
+                className="group h-12 sm:h-13 px-6 sm:px-7 font-semibold text-sm sm:text-base text-foreground bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 hover:border-white/20 backdrop-blur-xl rounded-2xl shadow-lg transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
+              >
+                <Link to="/login" className="flex items-center gap-2">
+                  <LogIn className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
+                  <span>Login to Account</span>
+                </Link>
               </Button>
             </div>
 
@@ -499,14 +511,17 @@ export default function Landing() {
           <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-secondary/10" />
           <div className="relative space-y-5">
             <h2 className="text-3xl sm:text-5xl md:text-6xl font-display font-extrabold tracking-tight">
-              Your {formatUSD(100000)} demo wallet <br /> is <span className="text-gradient">ready to trade</span>.
+              Your {currency === "INR" ? "₹95 Lakh" : "$100,000"} demo wallet <br /> is <span className="text-gradient">ready to trade</span>.
             </h2>
             <p className="text-sm sm:text-base text-muted-foreground max-w-xl mx-auto leading-relaxed">
               Practice trading with real order matching, ask Nova AI anything, and claim your $25 referral bonus today.
             </p>
             <div className="pt-2">
-              <Button asChild size="lg" className="bg-gradient-neon text-background shadow-glow-primary h-13 px-9 font-bold text-base rounded-2xl">
-                <Link to="/register">Create Free Account <ArrowRight className="w-4 h-4 ml-2" /></Link>
+              <Button asChild size="lg" className="group relative overflow-hidden h-13 px-9 font-bold text-base text-slate-950 bg-gradient-to-r from-emerald-400 via-teal-300 to-emerald-400 hover:from-emerald-300 hover:to-teal-200 shadow-xl shadow-emerald-500/25 rounded-2xl transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]">
+                <Link to="/register" className="flex items-center gap-2">
+                  <span>Create Free Account</span>
+                  <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                </Link>
               </Button>
             </div>
           </div>

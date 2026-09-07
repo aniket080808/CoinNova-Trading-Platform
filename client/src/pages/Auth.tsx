@@ -179,7 +179,7 @@ export const Register = () => {
           <Label>Full name</Label>
           <div className="relative">
             <User className="w-4 h-4 absolute left-3 top-3 text-muted-foreground" />
-            <Input value={name} onChange={(e) => setName(e.target.value)} className="pl-9" placeholder="Jane Crypto" />
+            <Input value={name} onChange={(e) => setName(e.target.value)} className="pl-9" placeholder="Enter your full name" />
           </div>
         </div>
         <div className="space-y-2">
@@ -211,7 +211,7 @@ export const Register = () => {
               value={referralCode}
               onChange={(e) => setReferralCode(e.target.value.toUpperCase())}
               className="pl-9 font-mono uppercase tracking-wider text-sm"
-              placeholder="e.g. ANIKET-8291"
+              placeholder="e.g. NOVA-8291"
             />
           </div>
         </div>
