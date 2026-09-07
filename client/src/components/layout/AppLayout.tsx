@@ -182,18 +182,43 @@ export const AppLayout = ({ children }: { children: ReactNode }) => {
         {/* Topbar */}
         <header className="sticky top-0 z-30 glass-strong border-b border-border/40 px-4 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <button className="lg:hidden" onClick={() => setOpen(true)}><Menu className="w-5 h-5" /></button>
-            <div className="text-sm text-muted-foreground hidden sm:block">
-              {nav.find((n) => location.pathname.startsWith(n.to))?.label ?? "Dashboard"}
+            <button
+              className="lg:hidden p-2 rounded-xl glass hover:bg-white/10 text-muted-foreground hover:text-foreground transition"
+              onClick={() => setOpen(true)}
+              aria-label="Open sidebar"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
+            <div className="flex items-center gap-2">
+              {(() => {
+                const currentNav = nav.find((n) => location.pathname === n.to || (n.to !== "/dashboard" && location.pathname.startsWith(n.to)));
+                const CurrentIcon = currentNav?.icon || LayoutDashboard;
+                const currentLabel = currentNav?.label || (location.pathname.startsWith("/coin/") ? "Coin Details" : "Dashboard");
+                return (
+                  <div className="flex items-center gap-2.5 px-3 py-1.5 rounded-xl glass border border-white/5 bg-background/30 shadow-sm">
+                    <div className="w-5 h-5 rounded-md bg-primary/15 border border-primary/25 flex items-center justify-center text-primary">
+                      <CurrentIcon className="w-3 h-3" />
+                    </div>
+                    <span className="text-[11px] font-semibold text-muted-foreground/80 uppercase tracking-wider hidden sm:inline">
+                      Platform
+                    </span>
+                    <span className="text-xs text-muted-foreground/30 hidden sm:inline">/</span>
+                    <span className="text-xs font-bold text-foreground tracking-tight">
+                      {currentLabel}
+                    </span>
+                  </div>
+                );
+              })()}
             </div>
           </div>
           <div className="flex items-center gap-3">
             <NotificationCenter />
             <Badge variant="outline" className={cn(
-              "border-primary/40 text-primary",
-              mode === "demo" ? "border-amber-500/40 text-amber-500 shadow-glow-amber/20" : "border-emerald-500/40 text-emerald-500 shadow-glow-emerald/20"
+              "border-primary/40 text-primary font-bold text-xs tracking-wider",
+              mode === "demo" ? "border-amber-500/40 text-amber-400 shadow-glow-amber/20 bg-amber-500/10" : "border-emerald-500/40 text-emerald-400 shadow-glow-emerald/20 bg-emerald-500/10"
             )}>
-              {mode === "demo" ? "DEMO MODE (Practice)" : "LIVE TRADING"}
+              <span className={cn("w-2 h-2 rounded-full mr-1.5 animate-pulse", mode === "demo" ? "bg-amber-400" : "bg-emerald-400")} />
+              {mode === "demo" ? "DEMO (PRACTICE)" : "LIVE TRADING"}
             </Badge>
           </div>
         </header>
@@ -223,21 +248,23 @@ export const AppLayout = ({ children }: { children: ReactNode }) => {
       <InstallPromptBanner />
 
       <AlertDialog open={showLogoutDialog} onOpenChange={setShowLogoutDialog}>
-        <AlertDialogContent className="glass-strong border-border/50">
-          <AlertDialogHeader>
-            <AlertDialogTitle className="flex items-center gap-2">
-              <LogOutIcon className="w-5 h-5 text-destructive" />
+        <AlertDialogContent className="glass-strong border border-white/10 p-6 rounded-2xl shadow-2xl">
+          <AlertDialogHeader className="space-y-3">
+            <div className="w-12 h-12 rounded-2xl bg-destructive/15 border border-destructive/25 flex items-center justify-center text-destructive shadow-glow-destructive/20">
+              <LogOutIcon className="w-6 h-6" />
+            </div>
+            <AlertDialogTitle className="text-xl font-bold font-display tracking-tight text-foreground">
               {logoutConfig.title}
             </AlertDialogTitle>
-            <AlertDialogDescription>
+            <AlertDialogDescription className="text-sm text-muted-foreground leading-relaxed">
               {logoutConfig.description}
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel className="bg-white/5 border-border/50 hover:bg-white/10 transition-all">Cancel</AlertDialogCancel>
+          <AlertDialogFooter className="gap-2 sm:gap-0 mt-4">
+            <AlertDialogCancel className="rounded-xl font-semibold">Cancel</AlertDialogCancel>
             <AlertDialogAction 
               onClick={handleLogout}
-              className="bg-destructive hover:bg-destructive/90 text-destructive-foreground shadow-glow-destructive/20 transition-all"
+              className="bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white shadow-glow-destructive/30 font-semibold rounded-xl px-5 transition-all"
             >
               Sign Out
             </AlertDialogAction>
