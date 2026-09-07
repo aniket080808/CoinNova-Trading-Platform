@@ -7,8 +7,17 @@ import { users, otpCodes } from "../db/schema.js";
 import { requireAuth } from "../middleware/auth.js";
 import { validate } from "../middleware/validate.js";
 import { generateOTP, sendPinSetupEmail, sendPinResetEmail, sendTwoFactorEmail, sendEmailChangeEmail } from "../services/email.js";
+import rateLimit from "express-rate-limit";
 
 const router = Router();
+
+const pinOtpLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000, // 10 mins
+  max: 5, // max 5 PIN OTP requests per 10 mins per IP
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many PIN verification requests. Please try again after 10 minutes." },
+});
 
 const setPinSchema = z.object({
   pin: z.string().length(6).regex(/^\d+$/, "PIN must be numeric"),
@@ -29,7 +38,7 @@ const forgotPinSchema = z.object({
 // ─── PIN Management ──────────────────────────────────────
 
 // Step 1: Request OTP for PIN Setup/Change
-router.post("/pin/request-otp", requireAuth, async (req, res) => {
+router.post("/pin/request-otp", requireAuth, pinOtpLimiter, async (req, res) => {
   try {
     const { action } = req.body; // 'setup' or 'reset'
     const userId = req.user!.userId;

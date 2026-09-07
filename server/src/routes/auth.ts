@@ -20,7 +20,18 @@ const router = Router();
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 min
   max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
   message: { error: "Too many attempts, please try again later" },
+});
+
+// Dedicated strict rate limiter on endpoints that trigger outbound Brevo transactional emails
+const emailOtpLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000, // 10 min window
+  max: 6, // max 6 verification requests per 10 min per IP
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many verification requests. Please wait a few minutes before trying again." },
 });
 
 async function upsertGoogleUser(email: string, name: string, picture?: string) {
@@ -184,7 +195,7 @@ router.get("/google/callback", async (req, res) => {
 
 // ─── POST /auth/register ────────────────────────────────
 
-router.post("/register", authLimiter, validate(registerSchema), async (req, res) => {
+router.post("/register", emailOtpLimiter, validate(registerSchema), async (req, res) => {
   try {
     const { name, email, password, referralCode: incomingCode } = req.body;
 
@@ -490,7 +501,7 @@ router.post("/verify-otp", authLimiter, validate(verifyOtpSchema), async (req, r
 
 // ─── POST /auth/forgot ──────────────────────────────────
 
-router.post("/forgot", authLimiter, validate(forgotSchema), async (req, res) => {
+router.post("/forgot", emailOtpLimiter, validate(forgotSchema), async (req, res) => {
   try {
     const { email } = req.body;
 
@@ -618,7 +629,7 @@ router.get("/me", requireAuth, async (req, res) => {
 
 // ─── POST /auth/resend-otp ─────────────────────────────
 
-router.post("/resend-otp", authLimiter, optionalAuth, async (req, res) => {
+router.post("/resend-otp", emailOtpLimiter, optionalAuth, async (req, res) => {
   try {
     const bodyEmail = req.body?.email ? String(req.body.email).toLowerCase().trim() : undefined;
     const userId = req.user?.userId;
