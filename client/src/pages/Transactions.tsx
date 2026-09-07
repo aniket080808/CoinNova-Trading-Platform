@@ -1,6 +1,7 @@
 import { GlassCard } from "@/components/glass/GlassCard";
 import { useDemo, formatUSD } from "@/store/demo";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ArrowDownRight, ArrowUpRight, ArrowLeftRight, Banknote, CreditCard, FileDown } from "lucide-react";
 import { useState } from "react";

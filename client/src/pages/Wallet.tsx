@@ -66,7 +66,7 @@ export default function Wallet() {
 
     setBusy(true);
     try {
-      const res = await deposit(amountInUsd, pin);
+      const res = (await deposit(amountInUsd, pin)) as any;
       if (res?.url) {
         window.location.href = res.url; // Redirect to Stripe Checkout if live
       } else {

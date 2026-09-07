@@ -28,6 +28,8 @@ export interface Transaction {
   status: "completed" | "pending" | "failed";
   createdAt: number;
   mode: Mode;
+  reason?: string;
+  confidence?: number;
 }
 
 export interface Alert {
@@ -102,16 +104,28 @@ export const useDemo = () => {
     syncWallet: isLive ? auth.syncWallet : demo.syncWallet,
     syncAll: auth.syncAll,
     
-    deposit: isLive ? auth.deposit : demo.deposit,
-    withdraw: isLive ? auth.withdraw : demo.withdraw,
-    transferOut: isLive ? auth.transfer : demo.transferOut,
+    deposit: (usd: number, pinOrLabel?: string) =>
+      isLive ? auth.deposit(usd, pinOrLabel) : demo.deposit(usd, pinOrLabel),
+    withdraw: (usd: number, destOrBank?: string, pin?: string) =>
+      isLive ? auth.withdraw(usd, destOrBank || "", pin) : demo.withdraw(usd, destOrBank, pin),
+    transferOut: (usd: number, dest: string, pin?: string) =>
+      isLive ? auth.transfer(usd, dest, pin) : demo.transferOut(usd, dest, pin),
     buy: isLive ? auth.buy : demo.buy,
     sell: isLive ? auth.sell : demo.sell,
     placeOrder: isLive ? auth.placeOrder : demo.placeOrder,
     cancelOrder: isLive ? auth.cancelOrder : demo.cancelOrder,
     checkDemoOrders: demo.checkOrders,
     toggleWatch: isLive ? auth.toggleWatch : demo.toggleWatch,
-    addAlert: isLive ? auth.addAlert : demo.addAlert,
+    addAlert: (arg: any, symbol?: string, direction?: "above" | "below", price?: number) => {
+      if (typeof arg === "object" && arg !== null) {
+        return isLive
+          ? auth.addAlert(arg.coinId, arg.symbol, arg.direction, arg.price)
+          : demo.addAlert(arg);
+      }
+      return isLive
+        ? auth.addAlert(arg, symbol!, direction!, price!)
+        : demo.addAlert({ coinId: arg, symbol, direction, price });
+    },
     removeAlert: isLive ? auth.removeAlert : demo.removeAlert,
 
     // Notification Actions
@@ -121,7 +135,7 @@ export const useDemo = () => {
 
     // Legacy/Internal
     resetDemo: demo.reset,
-    setOnboarded: () => {},
+    setOnboarded: (_val?: boolean) => {},
     hasOnboarded: true,
   };
 };

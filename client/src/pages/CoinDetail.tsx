@@ -113,7 +113,10 @@ export default function CoinDetail() {
       const ch24 = displayCoin.market_data?.price_change_percentage_24h;
       const mcap = displayCoin.market_data?.market_cap?.usd;
       const res = await aiApi.risk(id, displayCoin.name, price, ch24, mcap);
-      setAiAnalysis(res);
+      setAiAnalysis({
+        ...res,
+        level: (res.level.toLowerCase() === "high" ? "high" : res.level.toLowerCase() === "medium" ? "medium" : "low") as "low" | "medium" | "high",
+      });
     } catch (err: any) {
       toast.error("AI analysis failed: " + err.message);
     } finally {

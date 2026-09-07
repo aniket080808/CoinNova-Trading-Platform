@@ -15,9 +15,9 @@ interface DemoState {
   // Actions
   reset: () => void;
   syncWallet: () => Promise<void>;
-  deposit: (usd: number, label?: string) => void;
-  withdraw: (usd: number, dest?: string) => boolean;
-  transferOut: (usd: number, dest: string) => boolean;
+  deposit: (usd: number, label?: string, pin?: string) => void;
+  withdraw: (usd: number, dest?: string, pin?: string) => boolean;
+  transferOut: (usd: number, dest: string, pin?: string) => boolean;
   buy: (coin: { id: string; symbol: string; name: string; image: string }, usd: number, price: number, pin?: string, reason?: string, confidence?: number) => boolean;
   sell: (coinId: string, amount: number, price: number, pin?: string, reason?: string, confidence?: number) => boolean;
   placeOrder: (data: {
@@ -99,7 +99,7 @@ export const useDemoStore = create<DemoState>()(
           ],
         })),
 
-      withdraw: (usd, dest = "Bank ****1234") => {
+      withdraw: (usd, dest = "Bank ****1234", _pin?: string) => {
         const s = get();
         if (usd > s.walletUSD) return false;
         set({
@@ -120,7 +120,7 @@ export const useDemoStore = create<DemoState>()(
         return true;
       },
 
-      transferOut: (usd, dest) => {
+      transferOut: (usd, dest, _pin?: string) => {
         const s = get();
         if (usd > s.walletUSD) return false;
         set({

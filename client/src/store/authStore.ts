@@ -41,9 +41,9 @@ interface AuthState {
   syncAll: () => Promise<void>;
 
   // Live operations
-  deposit: (amount: number) => Promise<{ url: string }>;
-  withdraw: (amount: number, bank: string) => Promise<void>;
-  transfer: (amount: number, recipient: string) => Promise<void>;
+  deposit: (amount: number, transactionPin?: string) => Promise<{ url?: string } | void>;
+  withdraw: (amount: number, bank: string, transactionPin?: string) => Promise<void>;
+  transfer: (amount: number, recipient: string, transactionPin?: string) => Promise<void>;
   buy: (coin: { id: string; symbol: string; name: string; image: string }, usd: number, price: number, transactionPin?: string, reason?: string, confidence?: number) => Promise<void>;
   sell: (coinId: string, amount: number, price: number, transactionPin?: string, reason?: string, confidence?: number) => Promise<void>;
   placeOrder: (data: {

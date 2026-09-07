@@ -901,11 +901,11 @@ export default function Portfolio() {
       };
 
       if (mode === "live") {
-        await aiApi.runPortfolioHealth(payload);
+        await aiApi.portfolioHealth(payload);
         qc.invalidateQueries({ queryKey: ["portfolio-health-history"] });
         toast.success("Portfolio Health Check completed!");
       } else {
-        const res = await aiApi.runPortfolioHealth(payload);
+        const res = await aiApi.portfolioHealth(payload);
         setLocalHealth(res);
         toast.success("Demo Health Check completed!");
       }

@@ -137,7 +137,7 @@ export const authApi = {
     }),
 
   login: (email: string, password: string) =>
-    apiFetch<{ token?: string; user?: AuthUser; requiresTwoFactor?: boolean; message?: string }>("/auth/login", {
+    apiFetch<{ token?: string; user?: AuthUser; requiresTwoFactor?: boolean; status?: string; message?: string }>("/auth/login", {
       method: "POST", body: { email, password }, skipAuth: true,
     }),
 
@@ -308,6 +308,9 @@ export const aiApi = {
       weaknesses: string[];
       recommendations: string[];
     }>("/ai/portfolio-health", { method: "POST", body: data }),
+
+  runPortfolioHealth: (data: { holdings: any[]; walletBalance: number }) =>
+    aiApi.portfolioHealth(data),
 
   portfolioHealthHistory: () => apiFetch<any[]>("/ai/portfolio-health/history"),
 };
