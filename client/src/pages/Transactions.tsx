@@ -2,8 +2,9 @@ import { GlassCard } from "@/components/glass/GlassCard";
 import { useDemo, formatUSD } from "@/store/demo";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { ArrowDownRight, ArrowUpRight, ArrowLeftRight, Banknote, CreditCard } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, ArrowLeftRight, Banknote, CreditCard, FileDown } from "lucide-react";
 import { useState } from "react";
+import { ExportStatementModal } from "@/components/reports/ExportStatementModal";
 
 const ICONS: any = {
   buy: <ArrowDownRight className="w-4 h-4" />,
@@ -16,11 +17,23 @@ const ICONS: any = {
 export default function Transactions() {
   const { transactions } = useDemo();
   const [filter, setFilter] = useState<string>("all");
+  const [exportOpen, setExportOpen] = useState(false);
   const filtered = transactions.filter((t) => filter === "all" || t.type === filter);
 
   return (
     <div className="space-y-5">
-      <h1 className="text-3xl font-display font-bold">Transactions</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-3xl font-display font-bold">Transactions</h1>
+        <Button
+          variant="outline"
+          size="sm"
+          className="glass text-primary hover:bg-primary/10"
+          onClick={() => setExportOpen(true)}
+        >
+          <FileDown className="w-4 h-4 mr-1.5" />
+          Export Statement
+        </Button>
+      </div>
 
       <GlassCard className="p-3">
         <div className="flex gap-2 flex-wrap">
@@ -58,6 +71,8 @@ export default function Transactions() {
           ))}
         </div>
       </GlassCard>
+
+      <ExportStatementModal open={exportOpen} onOpenChange={setExportOpen} />
     </div>
   );
 }

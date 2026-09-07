@@ -13,6 +13,8 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { ChatWidget } from "@/components/ai/ChatWidget";
 import { NotificationCenter } from "./NotificationCenter";
+import { MobileBottomNav } from "./MobileBottomNav";
+import { InstallPromptBanner } from "@/components/pwa/InstallPromptBanner";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -216,6 +218,9 @@ export const AppLayout = ({ children }: { children: ReactNode }) => {
       </main>
 
       {!isDemoUser && <ChatWidget />}
+
+      <MobileBottomNav />
+      <InstallPromptBanner />
 
       <AlertDialog open={showLogoutDialog} onOpenChange={setShowLogoutDialog}>
         <AlertDialogContent className="glass-strong border-border/50">

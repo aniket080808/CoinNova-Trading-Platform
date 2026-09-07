@@ -1,0 +1,19 @@
+{
+  "name": "CoinNova — AI Trading Platform",
+  "short_name": "CoinNova",
+  "description": "AI-powered crypto trading platform with Trading DNA, real-time charts, and smart portfolio management.",
+  "start_url": "/dashboard",
+  "display": "standalone",
+  "background_color": "#030712",
+  "theme_color": "#030712",
+  "orientation": "portrait-primary",
+  "categories": ["finance", "crypto"],
+  "icons": [
+    {
+      "src": "/vite.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -148,7 +148,9 @@ export async function checkAndExecuteOrders(): Promise<number> {
         if (!fresh) return; // already processed
 
         const executionPrice = currentPrice;
-        const finalTotal = order.side === "buy" ? total : amount * executionPrice;
+        const actualCost = amount * executionPrice;
+        const leftoverEscrow = order.side === "buy" ? Math.max(0, total - actualCost) : 0;
+        const finalTotal = actualCost;
 
         // 1. Mark order as filled
         await tx
@@ -161,7 +163,18 @@ export async function checkAndExecuteOrders(): Promise<number> {
           .where(eq(orders.id, order.id));
 
         if (order.side === "buy") {
-          // BUY: USD was already escrowed on creation. Credit holdings.
+          // BUY: USD was already escrowed on creation.
+          // Refund any price improvement surplus to the user's wallet.
+          if (leftoverEscrow > 0.0001) {
+            await tx
+              .update(wallets)
+              .set({
+                balanceUsd: sql`CAST(${wallets.balanceUsd} AS NUMERIC) + CAST(${leftoverEscrow} AS NUMERIC)`,
+              })
+              .where(eq(wallets.userId, order.userId));
+          }
+
+          // Credit holdings with actualCost
           const [existingHolding] = await tx
             .select()
             .from(holdings)
@@ -174,7 +187,7 @@ export async function checkAndExecuteOrders(): Promise<number> {
             const oldAmt = Number(existingHolding.amount);
             const oldAvg = Number(existingHolding.avgPrice);
             const newAmt = oldAmt + amount;
-            const newAvg = (oldAvg * oldAmt + total) / newAmt;
+            const newAvg = (oldAvg * oldAmt + actualCost) / newAmt;
             await tx
               .update(holdings)
               .set({
@@ -209,11 +222,12 @@ export async function checkAndExecuteOrders(): Promise<number> {
 
           // Send trade notification
           try {
+            const refundMsg = leftoverEscrow > 0.01 ? ` Refunded $${leftoverEscrow.toFixed(2)} price improvement to your wallet.` : "";
             await tx.insert(notifications).values({
               userId: order.userId,
               type: "trade",
               title: `Limit Order Filled: Bought ${amount.toFixed(4)} ${order.symbol.toUpperCase()}`,
-              message: `Target reached! Executed at $${executionPrice.toFixed(2)} for total $${finalTotal.toFixed(2)}.`,
+              message: `Target reached! Executed at $${executionPrice.toFixed(2)} for total $${finalTotal.toFixed(2)}.${refundMsg}`,
               link: `/coin/${order.coinId}`,
             });
           } catch (_) {}

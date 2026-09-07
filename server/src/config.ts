@@ -47,16 +47,16 @@ export const config = {
 
   // Stripe
   stripe: {
-    secretKey: env("STRIPE_SECRET_KEY"),
-    webhookSecret: env("STRIPE_WEBHOOK_SECRET", ""),
+    secretKey: optionalEnv("STRIPE_SECRET_KEY", "sk_test_placeholder"),
+    webhookSecret: optionalEnv("STRIPE_WEBHOOK_SECRET", ""),
     successUrl: env("STRIPE_SUCCESS_URL", "http://localhost:8080/wallet?deposit=success"),
     cancelUrl: env("STRIPE_CANCEL_URL", "http://localhost:8080/wallet?deposit=cancel"),
   },
 
   // Razorpay
   razorpay: {
-    keyId: env("RAZORPAY_KEY_ID", ""),
-    keySecret: env("RAZORPAY_KEY_SECRET", ""),
+    keyId: optionalEnv("RAZORPAY_KEY_ID", ""),
+    keySecret: optionalEnv("RAZORPAY_KEY_SECRET", ""),
   },
 
   // Google OAuth

@@ -5,14 +5,16 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { useAuthStore } from "@/store/authStore";
 import { useCurrencyStore } from "@/store/currencyStore";
-import { ShieldCheck, User as UserIcon, LogOut, Globe, Lock, Loader2, CheckCircle2, AlertCircle, KeyRound, Mail } from "lucide-react";
+import { ShieldCheck, User as UserIcon, LogOut, Globe, Lock, Loader2, CheckCircle2, AlertCircle, KeyRound, Mail, BadgeCheck, Clock, XCircle } from "lucide-react";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger
 } from "@/components/ui/dialog";
 import { useNavigate, Link } from "react-router-dom";
-import api, { userApi, authApi } from "@/lib/api";
+import api, { userApi, authApi, kycApi } from "@/lib/api";
+import { KycVerificationModal } from "@/components/kyc/KycVerificationModal";
+import { ReferralHub } from "@/components/referral/ReferralHub";
 
 export default function Settings() {
   const { user, logout, fetchMe } = useAuthStore();
@@ -26,6 +28,17 @@ export default function Settings() {
   // Load from authStore user (synced from /auth/me)
   const [twofa, setTwofa] = useState(user?.twoFactorEnabled ?? false);
   const [updating, setUpdating] = useState(false);
+  const [kycModalOpen, setKycModalOpen] = useState(false);
+  const [kycStatus, setKycStatus] = useState<string>("unverified");
+  const [kycLevel, setKycLevel] = useState(1);
+
+  // Fetch KYC status
+  useEffect(() => {
+    kycApi.status().then((data) => {
+      setKycStatus(data.status);
+      setKycLevel(data.level);
+    }).catch(() => {});
+  }, [kycModalOpen]);
 
   const handleLogout = () => {
     logout();
@@ -276,6 +289,78 @@ export default function Settings() {
         </div>
       </GlassCard>
 
+      {/* KYC Identity Verification */}
+      {user?.role !== "admin" && (
+        <GlassCard className="space-y-4">
+          <div className="flex items-center gap-2 mb-2">
+            <BadgeCheck className="w-5 h-5 text-primary" />
+            <h3 className="font-semibold text-lg">Identity Verification (KYC)</h3>
+          </div>
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-sm font-medium">
+                {kycStatus === "verified" ? "Tier 2 — Verified" :
+                 kycStatus === "pending" ? "Under Review" :
+                 kycStatus === "rejected" ? "Rejected — Resubmit" : "Tier 1 — Basic"}
+              </div>
+              <div className="text-xs text-muted-foreground">
+                {kycStatus === "verified" ? "Unlimited withdrawals unlocked" :
+                 kycStatus === "pending" ? "Your identity is being verified by our team" :
+                 kycStatus === "rejected" ? "Your submission was rejected. You may try again." :
+                 "Verify your identity for unlimited withdrawal access"}
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              {kycStatus === "verified" ? (
+                <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-semibold">
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>Verified</span>
+                </div>
+              ) : kycStatus === "pending" ? (
+                <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs font-semibold">
+                  <Clock className="w-3.5 h-3.5" />
+                  <span>Pending</span>
+                </div>
+              ) : kycStatus === "rejected" ? (
+                <>
+                  <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-red-500/10 border border-red-500/30 text-red-400 text-xs font-semibold">
+                    <XCircle className="w-3.5 h-3.5" />
+                    <span>Rejected</span>
+                  </div>
+                  <Button variant="outline" size="sm" className="glass text-primary" onClick={() => setKycModalOpen(true)}>
+                    Resubmit
+                  </Button>
+                </>
+              ) : (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="glass text-primary hover:bg-primary/10"
+                  onClick={() => setKycModalOpen(true)}
+                >
+                  Verify Identity
+                </Button>
+              )}
+            </div>
+          </div>
+          {/* Tier benefits comparison */}
+          <div className="grid grid-cols-2 gap-2 text-xs">
+            <div className={`glass rounded-lg p-3 ${kycLevel === 1 ? 'border border-primary/30' : 'opacity-60'}`}>
+              <div className="font-semibold text-primary mb-1">Tier 1 — Basic</div>
+              <div className="text-muted-foreground">$500/day withdrawal limit</div>
+            </div>
+            <div className={`glass rounded-lg p-3 ${kycLevel === 2 ? 'border border-emerald-500/30' : 'opacity-60'}`}>
+              <div className="font-semibold text-emerald-400 mb-1">Tier 2 — Verified</div>
+              <div className="text-muted-foreground">Unlimited withdrawals</div>
+            </div>
+          </div>
+        </GlassCard>
+      )}
+
+      {/* Referral Program */}
+      {user?.role !== "admin" && <ReferralHub />}
+
+      <KycVerificationModal open={kycModalOpen} onOpenChange={setKycModalOpen} />
     </div>
   );
 }

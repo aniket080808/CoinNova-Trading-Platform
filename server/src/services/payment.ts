@@ -28,7 +28,8 @@ export interface PaymentAdapter {
 const stripe = new Stripe(config.stripe.secretKey);
 
 export const stripeAdapter: PaymentAdapter = {
-  async createCheckoutSession({ userId, email, amountUsd }) {
+  async createCheckoutSession({ userId, email, amountUsd }: CreateCheckoutParams) {
+    const sep = config.stripe.successUrl.includes("?") ? "&" : "?";
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ["card"],
       mode: "payment",
@@ -47,7 +48,7 @@ export const stripeAdapter: PaymentAdapter = {
           quantity: 1,
         },
       ],
-      success_url: `${config.stripe.successUrl}&session_id={CHECKOUT_SESSION_ID}`,
+      success_url: `${config.stripe.successUrl}${sep}session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: config.stripe.cancelUrl,
     });
 

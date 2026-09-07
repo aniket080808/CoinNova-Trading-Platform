@@ -19,9 +19,13 @@ import journalRoutes from "./routes/journal.js";
 import behaviorRoutes from "./routes/behavior.js";
 import notificationRoutes from "./routes/notifications.js";
 import ordersRoutes from "./routes/orders.js";
+import kycRoutes from "./routes/kyc.js";
+import referralRoutes from "./routes/referrals.js";
 import { startCronJobs } from "./services/cron.js";
 import { startOrderEngine } from "./services/orderEngine.js";
+import { ensureDatabaseSchema } from "./db/dbBootstrap.js";
 
+ensureDatabaseSchema();
 startCronJobs();
 startOrderEngine();
 
@@ -80,6 +84,8 @@ app.use("/journal", journalRoutes);
 app.use("/behavior", behaviorRoutes);
 app.use("/notifications", notificationRoutes);
 app.use("/orders", ordersRoutes);
+app.use("/kyc", kycRoutes);
+app.use("/referrals", referralRoutes);
 
 // Health check
 app.get("/health", (_req, res) => {

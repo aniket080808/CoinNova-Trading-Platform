@@ -1,7 +1,7 @@
 import { GlassCard } from "@/components/glass/GlassCard";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Users, ShieldCheck, AlertTriangle, DollarSign, Activity, Loader2 } from "lucide-react";
+import { Users, ShieldCheck, AlertTriangle, DollarSign, Activity, Loader2, BadgeCheck, CheckCircle2, XCircle } from "lucide-react";
 import { useDemo, formatUSD } from "@/store/demo";
 import { useAuthStore } from "@/store/authStore";
 import { adminApi } from "@/lib/api";
@@ -14,13 +14,16 @@ export default function Admin() {
   const [stats, setStats] = useState({ users: 0, transactions: 0, totalVolume: 0 });
   const [users, setUsers] = useState<any[]>([]);
   const [liveTxs, setLiveTxs] = useState<any[]>([]);
+  const [kycPending, setKycPending] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [rejectUserId, setRejectUserId] = useState<string | null>(null);
+  const [rejectReason, setRejectReason] = useState("");
 
   const refresh = () => {
     if (mode === "live") {
       setLoading(true);
-      Promise.all([adminApi.stats(), adminApi.users(), adminApi.transactions()])
-        .then(([s, u, t]) => { setStats(s); setUsers(u); setLiveTxs(t); })
+      Promise.all([adminApi.stats(), adminApi.users(), adminApi.transactions(), adminApi.kycPending()])
+        .then(([s, u, t, k]) => { setStats(s); setUsers(u); setLiveTxs(t); setKycPending(k); })
         .catch(() => {})
         .finally(() => setLoading(false));
     }
@@ -128,6 +131,104 @@ export default function Admin() {
                 ))}
               </div>
             </GlassCard>
+          )}
+
+          {/* KYC Pending Verifications */}
+          {kycPending.length > 0 && (
+            <GlassCard className="p-0 overflow-hidden border-amber-500/30">
+              <div className="px-4 py-3 bg-amber-500/5 border-b border-border/40 flex items-center justify-between">
+                <h3 className="font-semibold text-amber-400 flex items-center gap-2">
+                  <BadgeCheck className="w-4 h-4" /> Pending KYC Verifications ({kycPending.length})
+                </h3>
+              </div>
+              <div className="divide-y divide-border/40">
+                {kycPending.map((k: any) => (
+                  <div key={k.id} className="p-4 space-y-2">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-gradient-neon text-background flex items-center justify-center font-bold">
+                        {k.kycFullName?.[0] ?? k.name?.[0] ?? "?"}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="font-semibold">{k.kycFullName ?? k.name}</div>
+                        <div className="text-xs text-muted-foreground">{k.email}</div>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          className="bg-emerald-500 hover:bg-emerald-600 text-white"
+                          onClick={async () => {
+                            try {
+                              await adminApi.kycApprove(k.id);
+                              toast.success(`KYC approved for ${k.kycFullName ?? k.name}`);
+                              refresh();
+                            } catch (e) { toast.error("Failed to approve"); }
+                          }}
+                        >
+                          <CheckCircle2 className="w-3.5 h-3.5 mr-1" /> Approve
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => { setRejectUserId(k.id); setRejectReason(""); }}
+                        >
+                          <XCircle className="w-3.5 h-3.5 mr-1" /> Reject
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                      <div className="glass rounded-lg p-2">
+                        <div className="text-muted-foreground">Document</div>
+                        <div className="font-medium capitalize">{k.kycDocumentType?.replace("_", " ") ?? "—"}</div>
+                      </div>
+                      <div className="glass rounded-lg p-2">
+                        <div className="text-muted-foreground">Doc Number</div>
+                        <div className="font-medium font-mono">{k.kycDocumentNumber ?? "—"}</div>
+                      </div>
+                      <div className="glass rounded-lg p-2">
+                        <div className="text-muted-foreground">Country</div>
+                        <div className="font-medium">{k.kycCountry ?? "—"}</div>
+                      </div>
+                      <div className="glass rounded-lg p-2">
+                        <div className="text-muted-foreground">DOB</div>
+                        <div className="font-medium">{k.kycDob ?? "—"}</div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </GlassCard>
+          )}
+
+          {/* Reject reason dialog */}
+          {rejectUserId && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+              <div className="glass-strong rounded-2xl p-6 w-full max-w-sm space-y-4">
+                <h3 className="font-semibold">Reject KYC</h3>
+                <textarea
+                  value={rejectReason}
+                  onChange={(e) => setRejectReason(e.target.value)}
+                  placeholder="Enter rejection reason..."
+                  className="w-full h-24 glass rounded-xl p-3 text-sm resize-none"
+                />
+                <div className="flex gap-2">
+                  <Button variant="outline" className="flex-1 glass" onClick={() => setRejectUserId(null)}>Cancel</Button>
+                  <Button
+                    variant="destructive"
+                    className="flex-1"
+                    onClick={async () => {
+                      try {
+                        await adminApi.kycReject(rejectUserId!, rejectReason || "Documents did not pass verification.");
+                        toast.success("KYC rejected");
+                        setRejectUserId(null);
+                        refresh();
+                      } catch (e) { toast.error("Failed to reject"); }
+                    }}
+                  >
+                    Confirm Reject
+                  </Button>
+                </div>
+              </div>
+            </div>
           )}
 
           <GlassCard className="p-0 overflow-hidden">

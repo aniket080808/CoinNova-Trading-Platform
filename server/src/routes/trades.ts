@@ -96,7 +96,7 @@ router.post("/buy", requireAuth, verifyTransactionPin, validate(buySchema), asyn
 // POST /trades/sell
 router.post("/sell", requireAuth, verifyTransactionPin, validate(sellSchema), async (req, res) => {
   try {
-    const { coinId, amount, price } = req.body;
+    const { coinId, amount, price, reason, confidence } = req.body;
     const userId = req.user!.userId;
     const usd = amount * price;
 
@@ -126,7 +126,18 @@ router.post("/sell", requireAuth, verifyTransactionPin, validate(sellSchema), as
         .where(eq(wallets.userId, userId));
 
       console.log(`[SELL] Recording transaction...`);
-      await tx.insert(transactions).values({ userId, type: "sell", coinId, symbol: holding.symbol, amount: String(amount), price: String(price), total: String(usd), status: "completed" });
+      await tx.insert(transactions).values({
+        userId,
+        type: "sell",
+        coinId,
+        symbol: holding.symbol,
+        amount: String(amount),
+        price: String(price),
+        total: String(usd),
+        status: "completed",
+        reason: reason ?? null,
+        confidence: confidence ?? null,
+      });
 
       try {
         await tx.insert(notifications).values({

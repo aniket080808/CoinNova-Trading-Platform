@@ -54,6 +54,7 @@ interface AuthState {
     targetPrice: number;
     amount: number;
     pin?: string;
+    transactionPin?: string;
     reason?: string;
     confidence?: number;
   }) => Promise<void>;

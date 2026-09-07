@@ -1,6 +1,6 @@
 import { Router, raw } from "express";
 import { z } from "zod";
-import { eq, sql } from "drizzle-orm";
+import { eq, and, gte, sql } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { wallets, transactions, users } from "../db/schema.js";
 import { requireAuth } from "../middleware/auth.js";
@@ -110,19 +110,76 @@ router.post("/webhook", raw({ type: "application/json" }), async (req, res) => {
   res.json({ received: true });
 });
 
-// POST /wallet/withdraw
+// POST /wallet/withdraw — with atomic transaction and KYC limits
 router.post("/withdraw", requireAuth, verifyTransactionPin, validate(withdrawSchema), async (req, res) => {
   try {
     const { amount, bank } = req.body;
     const userId = req.user!.userId;
-    const [wallet] = await db.select().from(wallets).where(eq(wallets.userId, userId)).limit(1);
-    if (!wallet || Number(wallet.balanceUsd) < amount) { res.status(400).json({ error: "Insufficient balance" }); return; }
-    await db.update(wallets).set({ balanceUsd: sql`${wallets.balanceUsd}::numeric - ${amount}` }).where(eq(wallets.userId, userId));
-    await db.insert(transactions).values({ userId, type: "withdraw", amount: String(amount), total: String(amount), status: "pending", toDest: bank });
+
+    // 1. Enforce KYC Level 1 Daily Withdrawal Limit ($500/day)
+    const [user] = await db
+      .select({ kycLevel: users.kycLevel, kycStatus: users.kycStatus })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+
+    const kycLevel = user?.kycLevel ?? 1;
+
+    if (kycLevel < 2) {
+      const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const dayTxs = await db
+        .select({ total: transactions.total })
+        .from(transactions)
+        .where(
+          and(
+            eq(transactions.userId, userId),
+            eq(transactions.type, "withdraw"),
+            gte(transactions.createdAt, oneDayAgo)
+          )
+        );
+
+      const dayTotal = dayTxs.reduce((sum, t) => sum + Number(t.total || 0), 0);
+      if (dayTotal + amount > 500) {
+        res.status(403).json({
+          error: `Daily withdrawal limit ($500.00) exceeded for KYC Tier 1. Withdrawn in last 24h: $${dayTotal.toFixed(2)}. Complete full KYC verification in Settings to unlock unlimited withdrawals.`,
+        });
+        return;
+      }
+    }
+
+    // 2. Process withdrawal atomically
+    await db.transaction(async (tx) => {
+      const [wallet] = await tx.select().from(wallets).where(eq(wallets.userId, userId)).limit(1);
+      if (!wallet || Number(wallet.balanceUsd) < amount) {
+        throw new Error("Insufficient balance");
+      }
+
+      await tx
+        .update(wallets)
+        .set({ balanceUsd: sql`${wallets.balanceUsd}::numeric - ${amount}` })
+        .where(eq(wallets.userId, userId));
+
+      await tx.insert(transactions).values({
+        userId,
+        type: "withdraw",
+        amount: String(amount),
+        total: String(amount),
+        status: "pending",
+        toDest: bank,
+      });
+    });
+
     await sendWithdrawalAlert(req.user!.email, amount, bank);
     const [updated] = await db.select({ balanceUsd: wallets.balanceUsd }).from(wallets).where(eq(wallets.userId, userId)).limit(1);
     res.json({ message: "Withdrawal initiated", balanceUsd: Number(updated.balanceUsd) });
-  } catch (err) { console.error("Withdraw error:", err); res.status(500).json({ error: "Internal server error" }); }
+  } catch (err: any) {
+    console.error("Withdraw error:", err);
+    if (err.message === "Insufficient balance") {
+      res.status(400).json({ error: err.message });
+    } else {
+      res.status(500).json({ error: "Internal server error" });
+    }
+  }
 });
 
 // POST /wallet/transfer
@@ -140,6 +197,12 @@ router.post("/transfer", requireAuth, verifyTransactionPin, validate(transferSch
       if (!wallet || Number(wallet.balanceUsd) < amount) {
         throw new Error("Insufficient balance");
       }
+
+      // Ensure recipient wallet exists
+      await tx
+        .insert(wallets)
+        .values({ userId: recipientUser.id, balanceUsd: "0" })
+        .onConflictDoNothing();
 
       await tx.update(wallets).set({ balanceUsd: sql`${wallets.balanceUsd}::numeric - ${amount}` }).where(eq(wallets.userId, userId));
       await tx.update(wallets).set({ balanceUsd: sql`${wallets.balanceUsd}::numeric + ${amount}` }).where(eq(wallets.userId, recipientUser.id));

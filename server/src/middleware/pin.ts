@@ -17,7 +17,7 @@ export async function verifyTransactionPin(
       return;
     }
 
-    const pin = req.body.transactionPin || req.headers["x-transaction-pin"];
+    const pin = req.body?.transactionPin || req.body?.pin || req.headers["x-transaction-pin"];
 
     if (!pin) {
       res.status(400).json({ error: "Transaction PIN is required" });

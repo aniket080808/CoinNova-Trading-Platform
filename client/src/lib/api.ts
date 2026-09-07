@@ -88,12 +88,26 @@ export async function apiFetch<T = any>(path: string, opts: ApiOptions = {}): Pr
       throw new ApiError(data.error ?? "Invalid credentials", 401, data.details);
     }
 
+    const hadToken = !!getToken();
     clearToken();
-    // Redirect to login if not already there
-    if (!window.location.pathname.startsWith("/login")) {
+
+    // Only redirect to login if the user actually had an active token that expired
+    // and is currently on a protected route (not landing, market, or auth pages)
+    const isPublicPage =
+      window.location.pathname === "/" ||
+      window.location.pathname.startsWith("/login") ||
+      window.location.pathname.startsWith("/register") ||
+      window.location.pathname.startsWith("/market");
+
+    if (hadToken && !isPublicPage) {
       window.location.href = "/login";
     }
-    throw new ApiError(data.error ?? "Session expired. Please sign in again.", 401, data.details);
+
+    throw new ApiError(
+      data.error ?? (hadToken ? "Session expired. Please sign in again." : "Sign in required"),
+      401,
+      data.details
+    );
   }
 
   if (!res.ok) {
@@ -368,6 +382,10 @@ export const adminApi = {
   approveWithdrawal: (id: string) => apiFetch(`/admin/withdrawals/${id}/approve`, { method: "POST" }),
   rejectWithdrawal: (id: string) => apiFetch(`/admin/withdrawals/${id}/reject`, { method: "POST" }),
   deleteUser: (id: string) => apiFetch(`/admin/users/${id}`, { method: "DELETE" }),
+  // KYC admin
+  kycPending: () => apiFetch<any[]>("/admin/kyc/pending"),
+  kycApprove: (userId: string) => apiFetch(`/admin/kyc/${userId}/approve`, { method: "POST" }),
+  kycReject: (userId: string, reason: string) => apiFetch(`/admin/kyc/${userId}/reject`, { method: "POST", body: { reason } }),
 };
 
 // ─── Razorpay API ────────────────────────────────────────
@@ -453,13 +471,70 @@ export const ordersApi = {
     targetPrice: number;
     amount: number;
     pin?: string;
+    transactionPin?: string;
     reason?: string;
     confidence?: number;
-  }) => apiFetch<{ message: string; orderId: string }>("/orders", { method: "POST", body: data }),
+  }) =>
+    apiFetch<{ message: string; orderId: string }>("/orders", {
+      method: "POST",
+      body: {
+        ...data,
+        transactionPin: data.transactionPin || data.pin,
+        pin: data.pin || data.transactionPin,
+      },
+    }),
   cancel: (id: string) =>
     apiFetch<{ message: string }>(`/orders/${id}`, { method: "DELETE" }),
   check: () =>
     apiFetch<{ filledCount: number }>("/orders/check", { method: "POST" }),
+};
+
+// ─── KYC API ──────────────────────────────────────────────
+export const kycApi = {
+  status: () =>
+    apiFetch<{
+      status: string;
+      level: number;
+      limits: { dailyWithdraw: number; label: string };
+      details: {
+        documentType: string | null;
+        fullName: string | null;
+        dob: string | null;
+        country: string | null;
+        submittedAt: string | null;
+        reviewedAt: string | null;
+        rejectionReason: string | null;
+      };
+    }>("/kyc/status"),
+  submit: (data: {
+    fullName: string;
+    dob: string;
+    country: string;
+    documentType: string;
+    documentNumber: string;
+  }) => apiFetch<{ message: string; status: string }>("/kyc/submit", { method: "POST", body: data }),
+};
+
+// ─── Referral API ────────────────────────────────────────
+export const referralApi = {
+  stats: () =>
+    apiFetch<{
+      referralCode: string;
+      totalReferred: number;
+      totalEarned: number;
+      pendingRewards: number;
+      friends: {
+        id: string;
+        name: string;
+        email: string;
+        status: string;
+        reward: number;
+        claimed: boolean;
+        joinedAt: string;
+      }[];
+    }>("/referrals/stats"),
+  claim: () =>
+    apiFetch<{ message: string; amountClaimed: number }>("/referrals/claim", { method: "POST" }),
 };
 
 const api = {

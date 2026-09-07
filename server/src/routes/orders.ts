@@ -22,6 +22,8 @@ const createOrderSchema = z.object({
   side: z.enum(["buy", "sell"]),
   targetPrice: z.number().positive(),
   amount: z.number().positive(),
+  pin: z.string().optional(),
+  transactionPin: z.string().optional(),
   reason: z.string().optional(),
   confidence: z.number().min(0).max(100).optional(),
 });

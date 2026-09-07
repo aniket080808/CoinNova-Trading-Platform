@@ -41,6 +41,17 @@ export const otpTypeEnum = pgEnum("otp_type", [
   "pin_reset",
   "email_change"
 ]);
+export const kycStatusEnum = pgEnum("kyc_status", [
+  "unverified",
+  "pending",
+  "verified",
+  "rejected",
+]);
+export const referralStatusEnum = pgEnum("referral_status", [
+  "pending",
+  "completed",
+  "expired",
+]);
 // export const currencyEnum = pgEnum("currency_pref", ["USD", "INR"]);
 // export const difficultyEnum = pgEnum("difficulty", ["beginner", "intermediate", "advanced"]);
 
@@ -66,6 +77,22 @@ export const users = pgTable("users", {
   currencyPreference: varchar("currency_preference", { length: 10 }).default("USD").notNull(),
   xp: numeric("xp").default("0").notNull(),
   level: numeric("level").default("1").notNull(),
+  
+  // KYC Verification
+  kycStatus: kycStatusEnum("kyc_status").default("unverified").notNull(),
+  kycLevel: integer("kyc_level").default(1).notNull(), // 1=Basic ($500/day), 2=Verified (Unlimited)
+  kycDocumentType: varchar("kyc_document_type", { length: 50 }), // passport, national_id, driving_license, pan
+  kycDocumentNumber: text("kyc_document_number"),
+  kycFullName: varchar("kyc_full_name", { length: 255 }),
+  kycDob: varchar("kyc_dob", { length: 20 }),
+  kycCountry: varchar("kyc_country", { length: 100 }),
+  kycSubmittedAt: timestamp("kyc_submitted_at"),
+  kycReviewedAt: timestamp("kyc_reviewed_at"),
+  kycRejectionReason: text("kyc_rejection_reason"),
+
+  // Referral System
+  referralCode: varchar("referral_code", { length: 20 }).unique(),
+  referredBy: uuid("referred_by"),
   
   role: roleEnum("role").default("user").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -418,6 +445,29 @@ export const orders = pgTable(
     index("orders_user_idx").on(t.userId),
     index("orders_status_idx").on(t.status),
     index("orders_coin_idx").on(t.coinId),
+  ]
+);
+
+// ─── Referrals ────────────────────────────────────────────
+
+export const referrals = pgTable(
+  "referrals",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    referrerId: uuid("referrer_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    referredUserId: uuid("referred_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    status: referralStatusEnum("status").default("pending").notNull(),
+    rewardAmount: numeric("reward_amount", { precision: 18, scale: 8 }).default("25").notNull(),
+    claimed: boolean("claimed").default(false).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [
+    index("referrals_referrer_idx").on(t.referrerId),
+    index("referrals_referred_idx").on(t.referredUserId),
   ]
 );
 

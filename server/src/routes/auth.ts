@@ -4,7 +4,7 @@ import crypto from "crypto";
 import { z } from "zod";
 import { eq, and, sql } from "drizzle-orm";
 import { db } from "../db/index.js";
-import { users, wallets, otpCodes, transactions, holdings, watchlist, alerts, aiChats } from "../db/schema.js";
+import { users, wallets, otpCodes, transactions, holdings, watchlist, alerts, aiChats, referrals } from "../db/schema.js";
 import { signToken, requireAuth, optionalAuth } from "../middleware/auth.js";
 import { validate } from "../middleware/validate.js";
 import { config } from "../config.js";
@@ -58,6 +58,7 @@ const registerSchema = z.object({
   name: z.string().min(1).max(255),
   email: z.string().email(),
   password: z.string().min(6).max(128),
+  referralCode: z.string().max(20).optional(),
 });
 
 const loginSchema = z.object({
@@ -174,7 +175,7 @@ router.get("/google/callback", async (req, res) => {
 
 router.post("/register", authLimiter, validate(registerSchema), async (req, res) => {
   try {
-    const { name, email, password } = req.body;
+    const { name, email, password, referralCode: incomingCode } = req.body;
 
     // Check if email already exists
     const existing = await db
@@ -191,14 +192,44 @@ router.post("/register", authLimiter, validate(registerSchema), async (req, res)
     // Hash password
     const passwordHash = await bcrypt.hash(password, 12);
 
+    // Generate unique referral code for this new user
+    const newReferralCode = `NOVA-${crypto.randomBytes(3).toString('hex').toUpperCase().slice(0, 5)}`;
+
+    // Look up referrer if a referral code was provided
+    let referrerId: string | null = null;
+    if (incomingCode) {
+      const [referrer] = await db
+        .select({ id: users.id })
+        .from(users)
+        .where(eq(users.referralCode, incomingCode.trim().toUpperCase()))
+        .limit(1);
+      if (referrer) referrerId = referrer.id;
+    }
+
     // Create user
     const [user] = await db
       .insert(users)
-      .values({ name, email, passwordHash })
+      .values({
+        name,
+        email,
+        passwordHash,
+        referralCode: newReferralCode,
+        referredBy: referrerId,
+      })
       .returning({ id: users.id, email: users.email, role: users.role });
 
     // Create wallet with $0 starting balance
     await db.insert(wallets).values({ userId: user.id, balanceUsd: "0" });
+
+    // If referred, create a referral tracking record
+    if (referrerId) {
+      await db.insert(referrals).values({
+        referrerId,
+        referredUserId: user.id,
+        status: "completed",
+        rewardAmount: "25",
+      });
+    }
 
     // Generate and save OTP for email verification
     const otp = generateOTP();

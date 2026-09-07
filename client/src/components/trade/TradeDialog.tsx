@@ -55,8 +55,11 @@ export const TradeDialog = ({
   const open = controlledOpen !== undefined ? controlledOpen : internalOpen;
   const setOpen = setControlledOpen !== undefined ? setControlledOpen : setInternalOpen;
 
-  const [orderType, setOrderType] = useState<"market" | "limit" | "stop_loss">("market");
-  const [targetPrice, setTargetPrice] = useState("");
+  const [buyOrderType, setBuyOrderType] = useState<"market" | "limit">("market");
+  const [sellOrderType, setSellOrderType] = useState<"market" | "limit" | "stop_loss">("market");
+  const [buyTargetPrice, setBuyTargetPrice] = useState("");
+  const [sellTargetPrice, setSellTargetPrice] = useState("");
+  const [activeTab, setActiveTab] = useState<"buy" | "sell">(defaultTab);
   const [amount, setAmount] = useState(""); // Amount in current currency for buy
   const [sellAmount, setSellAmount] = useState("");
   const [busy, setBusy] = useState(false);
@@ -72,27 +75,40 @@ export const TradeDialog = ({
   const { rate } = useCurrencyStore.getState();
 
   const prevOpenRef = useRef(false);
-  const prevTargetPriceRef = useRef<number | undefined>(initialTargetPrice);
 
-  // Initialize orderType and targetPrice ONLY on dialog open transition or new external prop
+  // Initialize order types and target prices ONLY on initial open transition
   useEffect(() => {
     const justOpened = open && !prevOpenRef.current;
-    const newTargetSelected = open && initialTargetPrice !== undefined && initialTargetPrice !== prevTargetPriceRef.current;
 
-    if (justOpened || newTargetSelected) {
+    if (justOpened) {
+      const safePrice = Number.isFinite(currentPrice) && currentPrice > 0 ? currentPrice : (coin.current_price || 0);
+      const defaultBuyTarget = (safePrice * 0.98).toFixed(safePrice < 1 ? 4 : 2);
+      const defaultSellTarget = (safePrice * 1.05).toFixed(safePrice < 1 ? 4 : 2);
+
       if (initialTargetPrice) {
-        setTargetPrice(initialTargetPrice.toString());
-        setOrderType(initialOrderType || "limit");
-      } else if (justOpened) {
-        const safePrice = Number.isFinite(currentPrice) && currentPrice > 0 ? currentPrice : (coin.current_price || 0);
-        setTargetPrice(safePrice > 0 ? safePrice.toFixed(safePrice < 1 ? 4 : 2) : "");
-        setOrderType(initialOrderType || "market");
+        const targetStr = initialTargetPrice.toString();
+        if (initialOrderType === "stop_loss") {
+          setSellOrderType("stop_loss");
+          setSellTargetPrice(targetStr);
+          setActiveTab("sell");
+        } else {
+          setBuyOrderType("limit");
+          setBuyTargetPrice(targetStr);
+          setSellOrderType("limit");
+          setSellTargetPrice(targetStr);
+          if (defaultTab) setActiveTab(defaultTab);
+        }
+      } else {
+        setBuyTargetPrice(defaultBuyTarget);
+        setSellTargetPrice(defaultSellTarget);
+        setBuyOrderType(initialOrderType === "limit" ? "limit" : "market");
+        setSellOrderType(initialOrderType === "stop_loss" ? "stop_loss" : initialOrderType === "limit" ? "limit" : "market");
+        setActiveTab(defaultTab);
       }
     }
 
     prevOpenRef.current = open;
-    prevTargetPriceRef.current = initialTargetPrice;
-  }, [open, initialTargetPrice, initialOrderType]);
+  }, [open]);
 
   const executeBuy = async (amountInUsd: number, pin: string | undefined) => {
     setBusy(true);
@@ -216,7 +232,7 @@ export const TradeDialog = ({
 
   // ─── Limit & Stop-Loss Submission ─────────────────────────
   const onPlaceOrder = async (side: "buy" | "sell") => {
-    const target = parseFloat(targetPrice);
+    const target = side === "buy" ? parseFloat(buyTargetPrice) : parseFloat(sellTargetPrice);
     if (!target || target <= 0) return toast.error("Enter valid target price");
 
     let pin: string | undefined;
@@ -247,6 +263,7 @@ export const TradeDialog = ({
           targetPrice: target,
           amount: coinAmount,
           pin,
+          transactionPin: pin,
           reason: reason === "none" ? undefined : (reason || undefined),
           confidence,
         });
@@ -258,7 +275,7 @@ export const TradeDialog = ({
         if (!v || v <= 0) return toast.error("Enter amount");
         if (!holding || v > holding.amount) return toast.error("Not enough coins in holding");
 
-        const actualType = orderType === "stop_loss" ? "stop_loss" : "limit";
+        const actualType = sellOrderType === "stop_loss" ? "stop_loss" : "limit";
 
         await placeOrder({
           coinId: coin.id,
@@ -268,6 +285,7 @@ export const TradeDialog = ({
           targetPrice: target,
           amount: v,
           pin,
+          transactionPin: pin,
           reason: reason === "none" ? undefined : (reason || undefined),
           confidence,
         });
@@ -282,8 +300,11 @@ export const TradeDialog = ({
     }
   };
 
-  const parsedTarget = parseFloat(targetPrice) || currentPrice;
-  const priceDiffPct = ((parsedTarget - currentPrice) / currentPrice) * 100;
+  const parsedBuyTarget = parseFloat(buyTargetPrice) || currentPrice;
+  const buyPriceDiffPct = ((parsedBuyTarget - currentPrice) / currentPrice) * 100;
+
+  const parsedSellTarget = parseFloat(sellTargetPrice) || currentPrice;
+  const sellPriceDiffPct = ((parsedSellTarget - currentPrice) / currentPrice) * 100;
 
   return (
     <>
@@ -301,12 +322,8 @@ export const TradeDialog = ({
           </DialogHeader>
 
           <Tabs
-            defaultValue={defaultTab}
-            onValueChange={(val) => {
-              if (val === "buy" && orderType === "stop_loss") {
-                setOrderType("market");
-              }
-            }}
+            value={activeTab}
+            onValueChange={(val: any) => setActiveTab(val)}
           >
             <TabsList className="grid grid-cols-2 w-full mb-3">
               <TabsTrigger value="buy">Buy</TabsTrigger>
@@ -319,9 +336,9 @@ export const TradeDialog = ({
               <div className="flex gap-1 p-1 rounded-xl bg-secondary/50 border border-border/30">
                 <button
                   type="button"
-                  onClick={() => setOrderType("market")}
+                  onClick={() => setBuyOrderType("market")}
                   className={`flex-1 py-1.5 text-xs font-semibold rounded-lg flex items-center justify-center gap-1.5 transition-all ${
-                    orderType === "market"
+                    buyOrderType === "market"
                       ? "bg-primary text-background shadow-sm"
                       : "text-muted-foreground hover:text-foreground"
                   }`}
@@ -332,13 +349,13 @@ export const TradeDialog = ({
                 <button
                   type="button"
                   onClick={() => {
-                    setOrderType("limit");
-                    if (!targetPrice || parseFloat(targetPrice) >= currentPrice) {
-                      setTargetPrice((currentPrice * 0.98).toFixed(currentPrice < 1 ? 4 : 2));
+                    setBuyOrderType("limit");
+                    if (!buyTargetPrice || parseFloat(buyTargetPrice) >= currentPrice) {
+                      setBuyTargetPrice((currentPrice * 0.98).toFixed(currentPrice < 1 ? 4 : 2));
                     }
                   }}
                   className={`flex-1 py-1.5 text-xs font-semibold rounded-lg flex items-center justify-center gap-1.5 transition-all ${
-                    orderType === "limit"
+                    buyOrderType === "limit"
                       ? "bg-primary text-background shadow-sm"
                       : "text-muted-foreground hover:text-foreground"
                   }`}
@@ -349,20 +366,20 @@ export const TradeDialog = ({
               </div>
 
               {/* Target Price (for Limit Buy) */}
-              {orderType === "limit" && (
+              {buyOrderType === "limit" && (
                 <div className="space-y-2 p-3 rounded-xl bg-primary/5 border border-primary/20">
                   <div className="flex justify-between items-center text-xs">
                     <Label className="text-xs font-medium text-foreground">Target Buy Price ($)</Label>
-                    <span className={`text-[11px] font-semibold flex items-center gap-0.5 ${priceDiffPct < 0 ? "text-emerald-400" : "text-amber-400"}`}>
-                      {priceDiffPct < 0 ? <ArrowDown className="w-3 h-3" /> : <ArrowUp className="w-3 h-3" />}
-                      {Math.abs(priceDiffPct).toFixed(2)}% {priceDiffPct < 0 ? "below" : "above"} market
+                    <span className={`text-[11px] font-semibold flex items-center gap-0.5 ${buyPriceDiffPct < 0 ? "text-emerald-400" : "text-amber-400"}`}>
+                      {buyPriceDiffPct < 0 ? <ArrowDown className="w-3 h-3" /> : <ArrowUp className="w-3 h-3" />}
+                      {Math.abs(buyPriceDiffPct).toFixed(2)}% {buyPriceDiffPct < 0 ? "below" : "above"} market
                     </span>
                   </div>
                   <Input
                     type="number"
                     step="any"
-                    value={targetPrice}
-                    onChange={(e) => setTargetPrice(e.target.value)}
+                    value={buyTargetPrice}
+                    onChange={(e) => setBuyTargetPrice(e.target.value)}
                     className="bg-background/80 font-mono text-sm"
                   />
                   {/* Shortcut Pills */}
@@ -372,7 +389,7 @@ export const TradeDialog = ({
                         key={pct}
                         type="button"
                         onClick={() =>
-                          setTargetPrice((currentPrice * (1 + pct / 100)).toFixed(currentPrice < 1 ? 4 : 2))
+                          setBuyTargetPrice((currentPrice * (1 + pct / 100)).toFixed(currentPrice < 1 ? 4 : 2))
                         }
                         className="px-2 py-0.5 text-[10px] rounded bg-secondary/70 hover:bg-primary/20 hover:text-primary transition-colors border border-border/30"
                       >
@@ -381,14 +398,14 @@ export const TradeDialog = ({
                     ))}
                     <button
                       type="button"
-                      onClick={() => setTargetPrice(currentPrice.toFixed(currentPrice < 1 ? 4 : 2))}
+                      onClick={() => setBuyTargetPrice(currentPrice.toFixed(currentPrice < 1 ? 4 : 2))}
                       className="px-2 py-0.5 text-[10px] rounded bg-secondary/70 hover:bg-primary/20 hover:text-primary transition-colors border border-border/30 ml-auto"
                     >
                       Current
                     </button>
                   </div>
                   <p className="text-[11px] text-muted-foreground leading-tight pt-1">
-                    Triggers automatically when {coin.symbol.toUpperCase()} drops to <b>${parsedTarget.toFixed(2)}</b> or lower.
+                    Triggers automatically when {coin.symbol.toUpperCase()} drops to <b>${parsedBuyTarget.toFixed(2)}</b> or lower.
                   </p>
                 </div>
               )}
@@ -420,7 +437,7 @@ export const TradeDialog = ({
                   <div className="text-xs text-muted-foreground pt-1">
                     ≈ {(
                       (currency === "INR" ? parseFloat(amount) / rate : parseFloat(amount)) /
-                      (orderType === "limit" ? parsedTarget : currentPrice)
+                      (buyOrderType === "limit" ? parsedBuyTarget : currentPrice)
                     ).toFixed(6)}{" "}
                     {coin.symbol.toUpperCase()}
                   </div>
@@ -471,7 +488,7 @@ export const TradeDialog = ({
               )}
 
               {/* Action Button */}
-              {orderType === "market" ? (
+              {buyOrderType === "market" ? (
                 <Button
                   onClick={onBuy}
                   disabled={busy}
@@ -487,7 +504,7 @@ export const TradeDialog = ({
                   className="w-full bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold shadow-md shadow-emerald-500/20"
                 >
                   {busy ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Target className="w-4 h-4 mr-1.5" />}
-                  Place Limit Buy @ ${parsedTarget.toFixed(2)}
+                  Place Limit Buy @ ${parsedBuyTarget.toFixed(2)}
                 </Button>
               )}
             </TabsContent>
@@ -498,9 +515,9 @@ export const TradeDialog = ({
               <div className="flex gap-1 p-1 rounded-xl bg-secondary/50 border border-border/30">
                 <button
                   type="button"
-                  onClick={() => setOrderType("market")}
+                  onClick={() => setSellOrderType("market")}
                   className={`flex-1 py-1.5 text-xs font-semibold rounded-lg flex items-center justify-center gap-1 transition-all ${
-                    orderType === "market"
+                    sellOrderType === "market"
                       ? "bg-primary text-background shadow-sm"
                       : "text-muted-foreground hover:text-foreground"
                   }`}
@@ -511,13 +528,13 @@ export const TradeDialog = ({
                 <button
                   type="button"
                   onClick={() => {
-                    setOrderType("limit");
-                    if (!targetPrice || parseFloat(targetPrice) <= currentPrice) {
-                      setTargetPrice((currentPrice * 1.05).toFixed(currentPrice < 1 ? 4 : 2));
+                    setSellOrderType("limit");
+                    if (!sellTargetPrice || parseFloat(sellTargetPrice) <= currentPrice) {
+                      setSellTargetPrice((currentPrice * 1.05).toFixed(currentPrice < 1 ? 4 : 2));
                     }
                   }}
                   className={`flex-1 py-1.5 text-xs font-semibold rounded-lg flex items-center justify-center gap-1 transition-all ${
-                    orderType === "limit"
+                    sellOrderType === "limit"
                       ? "bg-primary text-background shadow-sm"
                       : "text-muted-foreground hover:text-foreground"
                   }`}
@@ -528,11 +545,11 @@ export const TradeDialog = ({
                 <button
                   type="button"
                   onClick={() => {
-                    setOrderType("stop_loss");
-                    setTargetPrice((currentPrice * 0.95).toFixed(currentPrice < 1 ? 4 : 2));
+                    setSellOrderType("stop_loss");
+                    setSellTargetPrice((currentPrice * 0.95).toFixed(currentPrice < 1 ? 4 : 2));
                   }}
                   className={`flex-1 py-1.5 text-xs font-semibold rounded-lg flex items-center justify-center gap-1 transition-all ${
-                    orderType === "stop_loss"
+                    sellOrderType === "stop_loss"
                       ? "bg-rose-500 text-slate-950 shadow-sm font-bold"
                       : "text-rose-400/80 hover:text-rose-400"
                   }`}
@@ -543,49 +560,49 @@ export const TradeDialog = ({
               </div>
 
               {/* Target / Stop Price Input */}
-              {orderType !== "market" && (
+              {sellOrderType !== "market" && (
                 <div
                   className={`space-y-2 p-3 rounded-xl border ${
-                    orderType === "stop_loss"
+                    sellOrderType === "stop_loss"
                       ? "bg-rose-500/10 border-rose-500/20"
                       : "bg-primary/5 border-primary/20"
                   }`}
                 >
                   <div className="flex justify-between items-center text-xs">
                     <Label className="text-xs font-medium text-foreground">
-                      {orderType === "stop_loss" ? "Stop Trigger Price ($)" : "Target Sell Price ($)"}
+                      {sellOrderType === "stop_loss" ? "Stop Trigger Price ($)" : "Target Sell Price ($)"}
                     </Label>
                     <span
                       className={`text-[11px] font-semibold flex items-center gap-0.5 ${
-                        orderType === "stop_loss"
+                        sellOrderType === "stop_loss"
                           ? "text-rose-400"
-                          : priceDiffPct > 0
+                          : sellPriceDiffPct > 0
                           ? "text-emerald-400"
                           : "text-amber-400"
                       }`}
                     >
-                      {priceDiffPct < 0 ? <ArrowDown className="w-3 h-3" /> : <ArrowUp className="w-3 h-3" />}
-                      {Math.abs(priceDiffPct).toFixed(2)}% {priceDiffPct < 0 ? "below" : "above"} market
+                      {sellPriceDiffPct < 0 ? <ArrowDown className="w-3 h-3" /> : <ArrowUp className="w-3 h-3" />}
+                      {Math.abs(sellPriceDiffPct).toFixed(2)}% {sellPriceDiffPct < 0 ? "below" : "above"} market
                     </span>
                   </div>
 
                   <Input
                     type="number"
                     step="any"
-                    value={targetPrice}
-                    onChange={(e) => setTargetPrice(e.target.value)}
+                    value={sellTargetPrice}
+                    onChange={(e) => setSellTargetPrice(e.target.value)}
                     className="bg-background/80 font-mono text-sm"
                   />
 
                   {/* Shortcut Pills */}
                   <div className="flex gap-1.5">
-                    {orderType === "stop_loss"
+                    {sellOrderType === "stop_loss"
                       ? [-3, -5, -10, -15].map((pct) => (
                           <button
                             key={pct}
                             type="button"
                             onClick={() =>
-                              setTargetPrice((currentPrice * (1 + pct / 100)).toFixed(currentPrice < 1 ? 4 : 2))
+                              setSellTargetPrice((currentPrice * (1 + pct / 100)).toFixed(currentPrice < 1 ? 4 : 2))
                             }
                             className="px-2 py-0.5 text-[10px] rounded bg-secondary/70 hover:bg-rose-500/20 hover:text-rose-400 transition-colors border border-border/30"
                           >
@@ -597,7 +614,7 @@ export const TradeDialog = ({
                             key={pct}
                             type="button"
                             onClick={() =>
-                              setTargetPrice((currentPrice * (1 + pct / 100)).toFixed(currentPrice < 1 ? 4 : 2))
+                              setSellTargetPrice((currentPrice * (1 + pct / 100)).toFixed(currentPrice < 1 ? 4 : 2))
                             }
                             className="px-2 py-0.5 text-[10px] rounded bg-secondary/70 hover:bg-primary/20 hover:text-primary transition-colors border border-border/30"
                           >
@@ -606,7 +623,7 @@ export const TradeDialog = ({
                         ))}
                     <button
                       type="button"
-                      onClick={() => setTargetPrice(currentPrice.toFixed(currentPrice < 1 ? 4 : 2))}
+                      onClick={() => setSellTargetPrice(currentPrice.toFixed(currentPrice < 1 ? 4 : 2))}
                       className="px-2 py-0.5 text-[10px] rounded bg-secondary/70 hover:bg-primary/20 hover:text-primary transition-colors border border-border/30 ml-auto"
                     >
                       Current
@@ -614,15 +631,15 @@ export const TradeDialog = ({
                   </div>
 
                   <p className="text-[11px] text-muted-foreground leading-tight pt-1">
-                    {orderType === "stop_loss" ? (
+                    {sellOrderType === "stop_loss" ? (
                       <>
                         Protects capital: sells automatically if price falls to or below{" "}
-                        <b>${parsedTarget.toFixed(2)}</b>.
+                        <b>${parsedSellTarget.toFixed(2)}</b>.
                       </>
                     ) : (
                       <>
                         Books profit: sells automatically when price reaches or exceeds{" "}
-                        <b>${parsedTarget.toFixed(2)}</b>.
+                        <b>${parsedSellTarget.toFixed(2)}</b>.
                       </>
                     )}
                   </p>
@@ -646,7 +663,7 @@ export const TradeDialog = ({
                       : "0.00"}
                   </span>
                   <span>
-                    ≈ {format((parseFloat(sellAmount) || 0) * (orderType !== "market" ? parsedTarget : currentPrice))}
+                    ≈ {format((parseFloat(sellAmount) || 0) * (sellOrderType !== "market" ? parsedSellTarget : currentPrice))}
                   </span>
                 </div>
                 {holding && (
@@ -710,7 +727,7 @@ export const TradeDialog = ({
               )}
 
               {/* Action Button */}
-              {orderType === "market" ? (
+              {sellOrderType === "market" ? (
                 <Button
                   onClick={onSell}
                   disabled={busy}
@@ -720,14 +737,14 @@ export const TradeDialog = ({
                   {busy ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
                   Sell {coin.symbol.toUpperCase()} (Market)
                 </Button>
-              ) : orderType === "stop_loss" ? (
+              ) : sellOrderType === "stop_loss" ? (
                 <Button
                   onClick={() => onPlaceOrder("sell")}
                   disabled={busy}
                   className="w-full bg-rose-600 hover:bg-rose-700 text-white font-bold shadow-md shadow-rose-600/20"
                 >
                   {busy ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <ShieldAlert className="w-4 h-4 mr-1.5" />}
-                  Place Stop-Loss @ ${parsedTarget.toFixed(2)}
+                  Place Stop-Loss @ ${parsedSellTarget.toFixed(2)}
                 </Button>
               ) : (
                 <Button
@@ -736,7 +753,7 @@ export const TradeDialog = ({
                   className="w-full bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold shadow-md shadow-emerald-500/20"
                 >
                   {busy ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Target className="w-4 h-4 mr-1.5" />}
-                  Place Limit Sell @ ${parsedTarget.toFixed(2)}
+                  Place Limit Sell @ ${parsedSellTarget.toFixed(2)}
                 </Button>
               )}
             </TabsContent>
