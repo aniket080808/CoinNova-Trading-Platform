@@ -39,7 +39,7 @@ export const config = {
   // Email (Brevo)
   brevo: {
     apiKey: optionalEnv("BREVO_API_KEY"),
-    senderEmail: optionalEnv("BREVO_SENDER_EMAIL", "aniketmeshram445@gmail.com"),
+    senderEmail: optionalEnv("BREVO_SENDER_EMAIL", "pravinmeshram0205@gmail.com"),
     senderName: optionalEnv("BREVO_SENDER_NAME", "CoinNova"),
     smtpUser: optionalEnv("BREVO_SMTP_USER"),
     smtpKey: optionalEnv("BREVO_SMTP_KEY"),
