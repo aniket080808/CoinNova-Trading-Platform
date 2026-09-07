@@ -411,7 +411,7 @@ export default function Portfolio() {
     }
   }, [livePrices, mode, checkDemoOrders]);
 
-  const [performanceTimeframe, setPerformanceTimeframe] = useState<PerformanceTimeframe>("30d");
+  const [performanceTimeframe, setPerformanceTimeframe] = useState<PerformanceTimeframe>("all");
 
 
   // Health check query
@@ -559,105 +559,302 @@ export default function Portfolio() {
     ].filter((d) => Number.isFinite(d.value) && d.value > 0);
   }, [walletUSD, enriched, totalPortfolioValue]);
 
-  // ─── 6. Performance Valuation Time-Series ───────────────
+  // ─── 6. Real Ledger-Based Valuation History ───────────────
   const performanceData = useMemo(() => {
-    const pointsCount =
-      performanceTimeframe === "24h" ? 24 : performanceTimeframe === "7d" ? 14 : performanceTimeframe === "30d" ? 30 : 60;
     const now = Date.now();
-    const timeStep =
-      performanceTimeframe === "24h"
-        ? 3600 * 1000
-        : performanceTimeframe === "7d"
-        ? 12 * 3600 * 1000
-        : performanceTimeframe === "30d"
-        ? 24 * 3600 * 1000
-        : 48 * 3600 * 1000;
-
-    const points = [];
     const safeWalletUSD = Number.isFinite(walletUSD) ? walletUSD : 0;
-    const safePortfolioVal = Number.isFinite(totalPortfolioValue) && totalPortfolioValue > 0 ? totalPortfolioValue : safeWalletUSD;
-    const safeCostBasis = Number.isFinite(totalCostBasis) ? totalCostBasis : 0;
+    const safePortfolioVal =
+      Number.isFinite(totalPortfolioValue) && totalPortfolioValue > 0
+        ? totalPortfolioValue
+        : safeWalletUSD;
     const safeHoldingsVal = Number.isFinite(totalHoldingsValue) ? totalHoldingsValue : 0;
 
-    // Case 1: Zero crypto holdings (100% cash) -> Steady, flat valuation line at current net worth
-    if (enriched.length === 0 || safeHoldingsVal <= 0) {
-      for (let i = pointsCount; i >= 0; i--) {
-        const t = now - i * timeStep;
-        const label =
-          performanceTimeframe === "24h"
-            ? new Date(t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-            : new Date(t).toLocaleDateString([], { month: "short", day: "numeric" });
+    // Filter and sort completed transactions chronologically
+    const completedTxs = [...transactions]
+      .filter((t) => (t.status === "completed" || !t.status) && Number.isFinite(t.createdAt))
+      .sort((a, b) => a.createdAt - b.createdAt);
 
-        points.push({
-          time: label,
+    // Calculate net cash change across all transactions to find baseline starting cash
+    let deltaCash = 0;
+    for (const t of completedTxs) {
+      const amt = Number(t.amount) || 0;
+      const tot = Number(t.total) || 0;
+      if (t.type === "deposit") {
+        deltaCash += amt;
+      } else if (t.type === "withdraw" || t.type === "transfer") {
+        deltaCash -= amt;
+      } else if (t.type === "buy") {
+        deltaCash -= tot;
+      } else if (t.type === "sell") {
+        deltaCash += tot;
+      }
+    }
+
+    // In live mode, starting cash before first transaction is max(0, walletUSD - deltaCash).
+    // If demo mode has no deposit transactions, initial cash was $100k.
+    const initialCash =
+      mode === "demo" && completedTxs.every((t) => t.type !== "deposit")
+        ? 100000
+        : Math.max(0, safeWalletUSD - deltaCash);
+
+    // If zero transactions and zero holdings: flat baseline at current net worth
+    if (completedTxs.length === 0 && enriched.length === 0) {
+      const pts = [];
+      const duration =
+        performanceTimeframe === "24h"
+          ? 24 * 3600 * 1000
+          : performanceTimeframe === "7d"
+          ? 7 * 24 * 3600 * 1000
+          : performanceTimeframe === "30d"
+          ? 30 * 24 * 3600 * 1000
+          : performanceTimeframe === "90d"
+          ? 90 * 24 * 3600 * 1000
+          : 24 * 3600 * 1000;
+      const count = 12;
+      for (let i = count; i >= 0; i--) {
+        const t = now - (i / count) * duration;
+        pts.push({
+          time:
+            performanceTimeframe === "24h"
+              ? new Date(t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+              : new Date(t).toLocaleDateString([], { month: "short", day: "numeric" }),
+          fullTime: new Date(t).toLocaleString([], { dateStyle: "medium", timeStyle: "short" }),
+          timestamp: t,
           value: parseFloat(safePortfolioVal.toFixed(2)),
+          cash: parseFloat(safeWalletUSD.toFixed(2)),
+          crypto: 0,
           profit: 0,
         });
       }
-      return points;
+      return pts;
     }
 
-    // Case 2: User holds crypto positions -> Calculate trajectory from actual holdings and price changes
-    const baselineCost = safeWalletUSD + safeCostBasis;
+    // Determine timeframe boundaries [timeframeStart, now]
+    const firstTxTime = completedTxs.length > 0 ? completedTxs[0].createdAt : now - 24 * 3600 * 1000;
+    let timeframeStart = now - 24 * 3600 * 1000;
+    if (performanceTimeframe === "24h") {
+      timeframeStart = now - 24 * 3600 * 1000;
+    } else if (performanceTimeframe === "7d") {
+      timeframeStart = now - 7 * 24 * 3600 * 1000;
+    } else if (performanceTimeframe === "30d") {
+      timeframeStart = now - 30 * 24 * 3600 * 1000;
+    } else if (performanceTimeframe === "90d") {
+      timeframeStart = now - 90 * 24 * 3600 * 1000;
+    } else if (performanceTimeframe === "all") {
+      // For "all", frame starting 1 hour before first activity
+      timeframeStart = Math.min(firstTxTime - 3600 * 1000, now - 24 * 3600 * 1000);
+    }
 
-    for (let i = pointsCount; i >= 0; i--) {
-      const t = now - i * timeStep;
-      const progress = (pointsCount - i) / pointsCount; // 0 = oldest, 1 = current (now)
+    // Build sequential balance milestones at each transaction
+    interface LedgerSnapshot {
+      timestamp: number;
+      cash: number;
+      holdings: Record<string, number>;
+      costs: Record<string, number>;
+      netDeposited: number;
+      event?: string;
+    }
 
-      let historicalCryptoValue = 0;
-      for (const h of enriched) {
-        let pctChange = 0;
-        if (performanceTimeframe === "24h") {
-          pctChange = Number.isFinite(h.change24h) ? h.change24h : 0;
-        } else if (performanceTimeframe === "7d") {
-          pctChange =
-            (h.coin as any)?.price_change_percentage_7d_in_currency ??
-            (h.coin as any)?.price_change_percentage_7d ??
-            h.change24h ??
-            0;
-        } else {
-          pctChange =
-            (h.coin as any)?.price_change_percentage_30d ??
-            (h.unrealizedPnLPct || 0);
+    const snapshots: LedgerSnapshot[] = [];
+
+    // State at the very beginning (prior to first transaction)
+    let currentCash = initialCash;
+    const currentHoldingAmts: Record<string, number> = {};
+    const currentHoldingCosts: Record<string, number> = {};
+    let currentNetDeposited = mode === "demo" && initialCash === 100000 ? 100000 : 0;
+
+    // Snapshot before first transaction
+    snapshots.push({
+      timestamp: Math.min(timeframeStart, firstTxTime - 1000),
+      cash: currentCash,
+      holdings: { ...currentHoldingAmts },
+      costs: { ...currentHoldingCosts },
+      netDeposited: currentNetDeposited,
+    });
+
+    for (const tx of completedTxs) {
+      const sym = (tx.symbol || tx.coinId || "").toLowerCase();
+      const amt = Number(tx.amount) || 0;
+      const tot = Number(tx.total) || 0;
+      let eventDesc: string | undefined;
+
+      // Pre-event snapshot (1ms before tx) to show clear steps on charts
+      snapshots.push({
+        timestamp: tx.createdAt - 1,
+        cash: currentCash,
+        holdings: { ...currentHoldingAmts },
+        costs: { ...currentHoldingCosts },
+        netDeposited: currentNetDeposited,
+      });
+
+      if (tx.type === "deposit") {
+        currentCash += amt;
+        currentNetDeposited += amt;
+        eventDesc = `Deposit: +${formatUSD(amt)}`;
+      } else if (tx.type === "withdraw") {
+        currentCash = Math.max(0, currentCash - amt);
+        currentNetDeposited -= amt;
+        eventDesc = `Withdraw: -${formatUSD(amt)}`;
+      } else if (tx.type === "transfer") {
+        currentCash = Math.max(0, currentCash - amt);
+        currentNetDeposited -= amt;
+        eventDesc = `Transfer: -${formatUSD(amt)}`;
+      } else if (tx.type === "buy") {
+        currentCash = Math.max(0, currentCash - tot);
+        if (sym) {
+          currentHoldingAmts[sym] = (currentHoldingAmts[sym] || 0) + amt;
+          currentHoldingCosts[sym] = (currentHoldingCosts[sym] || 0) + tot;
         }
-
-        const rawPct = Number.isFinite(pctChange) ? pctChange : 0;
-        const divisor = 1 + rawPct / 100;
-        const safeDivisor = Math.abs(divisor) < 0.001 ? 1 : divisor;
-        const curPrice = Number.isFinite(h.currentPrice) && h.currentPrice > 0 ? h.currentPrice : (h.avgPrice || 1);
-        const startPrice = curPrice / safeDivisor;
-        const trendPrice = startPrice + (curPrice - startPrice) * progress;
-
-        const dampener = Math.sin(progress * Math.PI);
-        const noise = Math.sin(i * 2.3 + (h.symbol?.charCodeAt(0) || 0)) * 0.004;
-        const estimatedPrice = i === 0 ? curPrice : Math.max(0, trendPrice * (1 + dampener * noise));
-        const safeAmount = Number.isFinite(h.amount) ? h.amount : 0;
-
-        historicalCryptoValue += safeAmount * (Number.isFinite(estimatedPrice) ? estimatedPrice : curPrice);
+        eventDesc = `Buy ${sym ? sym.toUpperCase() : "Crypto"}: ${formatUSD(tot)}`;
+      } else if (tx.type === "sell") {
+        currentCash += tot;
+        if (sym) {
+          currentHoldingAmts[sym] = Math.max(0, (currentHoldingAmts[sym] || 0) - amt);
+          if (currentHoldingAmts[sym] === 0) {
+            currentHoldingCosts[sym] = 0;
+          }
+        }
+        eventDesc = `Sell ${sym ? sym.toUpperCase() : "Crypto"}: +${formatUSD(tot)}`;
       }
 
-      const totalVal = i === 0 ? safePortfolioVal : safeWalletUSD + historicalCryptoValue;
-      const profit = totalVal - baselineCost;
+      // Post-event snapshot
+      snapshots.push({
+        timestamp: tx.createdAt,
+        cash: currentCash,
+        holdings: { ...currentHoldingAmts },
+        costs: { ...currentHoldingCosts },
+        netDeposited: currentNetDeposited,
+        event: eventDesc,
+      });
+    }
+
+    // Helper: evaluate portfolio valuation at any timestamp t
+    const evaluateAt = (targetTime: number, isLatest = false) => {
+      if (isLatest) {
+        return {
+          totalVal: safePortfolioVal,
+          cashVal: safeWalletUSD,
+          cryptoVal: safeHoldingsVal,
+          profitVal: safePortfolioVal - currentNetDeposited,
+        };
+      }
+
+      // Find the latest snapshot on or before targetTime
+      let snap = snapshots[0];
+      for (let i = snapshots.length - 1; i >= 0; i--) {
+        if (snapshots[i].timestamp <= targetTime) {
+          snap = snapshots[i];
+          break;
+        }
+      }
+
+      let cryptoVal = 0;
+      for (const sym of Object.keys(snap.holdings)) {
+        const heldAmt = snap.holdings[sym] || 0;
+        if (heldAmt <= 0) continue;
+
+        // Current live price for this coin
+        const livePrice =
+          livePrices[sym.toLowerCase()] ||
+          livePrices[sym.toUpperCase()] ||
+          enriched.find((h) => h.symbol.toLowerCase() === sym)?.currentPrice ||
+          1;
+
+        // Average cost or transaction price
+        const costBasis = snap.costs[sym] || 0;
+        const avgCostPrice = heldAmt > 0 && costBasis > 0 ? costBasis / heldAmt : livePrice;
+
+        // Time factor between transaction and now for smooth real price evolution
+        const timeSpan = Math.max(1000, now - snap.timestamp);
+        const elapsed = Math.max(0, Math.min(timeSpan, targetTime - snap.timestamp));
+        const alpha = elapsed / timeSpan;
+
+        const effectivePrice = avgCostPrice + alpha * (livePrice - avgCostPrice);
+        cryptoVal += heldAmt * effectivePrice;
+      }
+
+      const totalVal = Math.max(0, snap.cash + cryptoVal);
+      const profitVal = totalVal - snap.netDeposited;
+
+      return {
+        totalVal,
+        cashVal: snap.cash,
+        cryptoVal,
+        profitVal,
+        event: snap.timestamp === targetTime ? snap.event : undefined,
+      };
+    };
+
+    // Generate grid timestamps within [timeframeStart, now]
+    const gridCount =
+      performanceTimeframe === "24h"
+        ? 24
+        : performanceTimeframe === "7d"
+        ? 28
+        : performanceTimeframe === "30d"
+        ? 30
+        : 45;
+
+    const sampleTimestamps = new Set<number>();
+    sampleTimestamps.add(timeframeStart);
+    sampleTimestamps.add(now);
+
+    const stepMs = (now - timeframeStart) / gridCount;
+    for (let i = 1; i < gridCount; i++) {
+      sampleTimestamps.add(Math.round(timeframeStart + i * stepMs));
+    }
+
+    // Include all transaction event timestamps within the timeframe
+    for (const snap of snapshots) {
+      if (snap.timestamp >= timeframeStart && snap.timestamp <= now) {
+        sampleTimestamps.add(snap.timestamp);
+      }
+    }
+
+    const sortedTimes = Array.from(sampleTimestamps).sort((a, b) => a - b);
+
+    const points = sortedTimes.map((t, idx) => {
+      const isLast = idx === sortedTimes.length - 1;
+      const { totalVal, cashVal, cryptoVal, profitVal, event } = evaluateAt(t, isLast);
 
       const label =
         performanceTimeframe === "24h"
           ? new Date(t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
           : new Date(t).toLocaleDateString([], { month: "short", day: "numeric" });
 
-      const safeVal = Number.isFinite(totalVal) ? Math.max(0, totalVal) : safePortfolioVal;
-      const safeProfit = Number.isFinite(profit) ? profit : 0;
-
-      points.push({
-        time: label,
-        value: parseFloat(safeVal.toFixed(2)),
-        profit: parseFloat(safeProfit.toFixed(2)),
+      const fullTime = new Date(t).toLocaleString([], {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
       });
-    }
+
+      return {
+        time: label,
+        fullTime,
+        timestamp: t,
+        value: parseFloat(totalVal.toFixed(2)),
+        cash: parseFloat(cashVal.toFixed(2)),
+        crypto: parseFloat(cryptoVal.toFixed(2)),
+        profit: parseFloat(profitVal.toFixed(2)),
+        event,
+      };
+    });
 
     return points;
-  }, [performanceTimeframe, totalPortfolioValue, totalHoldingsValue, totalCostBasis, walletUSD, enriched]);
+  }, [
+    performanceTimeframe,
+    totalPortfolioValue,
+    totalHoldingsValue,
+    walletUSD,
+    transactions,
+    enriched,
+    livePrices,
+    mode,
+  ]);
 
-  // Guaranteed finite numeric domain for YAxis to prevent Recharts DecimalError NaN crashes
+  // Guaranteed finite numeric domain for YAxis with adaptive padding
   const yDomain = useMemo<[number, number]>(() => {
     const values = performanceData.map((d) => d.value).filter((v) => Number.isFinite(v));
     if (values.length === 0) return [0, 100];
@@ -665,11 +862,27 @@ export default function Portfolio() {
     const max = Math.max(...values);
     if (!Number.isFinite(min) || !Number.isFinite(max)) return [0, 100];
     if (min === max) {
-      return [Math.max(0, Math.floor(min * 0.95)), Math.ceil(max * 1.05) || 100];
+      return [Math.max(0, Math.floor(min * 0.9)), Math.ceil(max * 1.1) || 100];
     }
-    const padding = (max - min) * 0.08;
-    return [Math.max(0, Math.floor(min - padding)), Math.ceil(max + padding)];
+    const span = max - min;
+    const padding = span * 0.08;
+    const domainMin = min === 0 || min - padding < 0 ? 0 : Math.floor(min - padding);
+    const domainMax = Math.ceil(max + padding);
+    return [domainMin, domainMax];
   }, [performanceData]);
+
+  // Intelligent Y-axis tick formatter preventing duplicate identical labels
+  const formatYAxisTick = (v: number) => {
+    if (!Number.isFinite(v)) return "$0";
+    if (v === 0) return "$0";
+    const span = yDomain[1] - yDomain[0];
+    if (span <= 10) return `$${v.toFixed(2)}`;
+    if (span <= 500) return `$${Math.round(v).toLocaleString()}`;
+    if (v >= 1_000_000) return `$${(v / 1_000_000).toFixed(1)}M`;
+    if (v >= 10_000) return `$${(v / 1000).toFixed(span < 20000 ? 1 : 0)}k`;
+    if (v >= 1000) return `$${(v / 1000).toFixed(span < 2000 ? 2 : 1)}k`;
+    return `$${Math.round(v)}`;
+  };
 
   // ─── 7. Health Check Handlers ────────────────────────────
   const handleAnalysis = async () => {
@@ -1220,7 +1433,11 @@ export default function Portfolio() {
                     <h3 className="font-bold text-base flex items-center gap-2">
                       <LineChartIcon className="w-4 h-4 text-primary" /> Valuation History
                     </h3>
-                    <p className="text-xs text-muted-foreground">Portfolio balance over selected timeframe</p>
+                    <p className="text-xs text-muted-foreground">
+                      {transactions.length > 0
+                        ? `Real ledger tracking • ${transactions.length} trade${transactions.length > 1 ? "s" : ""} & transfers recorded`
+                        : "Live balance tracking over selected timeframe"}
+                    </p>
                   </div>
 
                   {/* Timeframe selector */}
@@ -1263,24 +1480,56 @@ export default function Portfolio() {
                         stroke="#ffffff40"
                         fontSize={11}
                         domain={yDomain}
-                        tickFormatter={(v) => `$${v >= 1000 ? (v / 1000).toFixed(1) + "k" : v}`}
-                        width={50}
+                        tickFormatter={formatYAxisTick}
+                        width={58}
                       />
                       <RechartsTooltip
                         contentStyle={{
                           backgroundColor: "#0f172a",
                           border: "1px solid #334155",
                           borderRadius: "12px",
+                          boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.5)",
                         }}
-                        formatter={(val: number, _name: string, item: any) => {
-                          const profit = item?.payload?.profit ?? 0;
-                          const profitSign = profit >= 0 ? "+" : "";
-                          return [
-                            `${formatUSD(val)}${profit !== 0 ? ` (${profitSign}${formatUSD(profit)})` : ""}`,
-                            "Portfolio Value",
-                          ];
+                        content={({ active, payload }) => {
+                          if (!active || !payload || !payload.length) return null;
+                          const data = payload[0].payload;
+                          return (
+                            <div className="p-3 space-y-1.5 text-xs bg-slate-900/95 backdrop-blur border border-slate-700/80 rounded-xl shadow-xl min-w-[200px]">
+                              <div className="text-slate-400 font-medium pb-1 border-b border-slate-800">
+                                {data.fullTime || data.time}
+                              </div>
+                              {data.event && (
+                                <div className="inline-block px-2 py-0.5 rounded bg-primary/20 text-primary font-semibold text-[11px] mt-1 mb-1">
+                                  {data.event}
+                                </div>
+                              )}
+                              <div className="flex items-center justify-between gap-4">
+                                <span className="text-slate-400">Portfolio Value:</span>
+                                <span className="font-bold text-white text-sm">{formatUSD(data.value)}</span>
+                              </div>
+                              {data.cash !== undefined && (
+                                <div className="flex items-center justify-between gap-4">
+                                  <span className="text-slate-400">Cash Balance:</span>
+                                  <span className="font-medium text-sky-400">{formatUSD(data.cash)}</span>
+                                </div>
+                              )}
+                              {data.crypto !== undefined && (
+                                <div className="flex items-center justify-between gap-4">
+                                  <span className="text-slate-400">Crypto Assets:</span>
+                                  <span className="font-medium text-amber-400">{formatUSD(data.crypto)}</span>
+                                </div>
+                              )}
+                              {data.profit !== undefined && (
+                                <div className="flex items-center justify-between gap-4 pt-1 border-t border-slate-800">
+                                  <span className="text-slate-400">Net Return:</span>
+                                  <span className={clsx("font-semibold", data.profit >= 0 ? "text-emerald-400" : "text-rose-400")}>
+                                    {data.profit >= 0 ? "+" : ""}{formatUSD(data.profit)}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          );
                         }}
-                        labelStyle={{ color: "#94a3b8", fontSize: "12px" }}
                       />
                       <Area
                         type="monotone"
