@@ -9,7 +9,7 @@ import { ReactNode, useState, useEffect } from "react";
 import { useDemo } from "@/store/demo";
 import { toast } from "sonner";
 import { Eye, EyeOff, Mail, Lock, User, Shield, ArrowRight, KeyRound, Loader2, BadgeCheck, Gift } from "lucide-react";
-import { authApi, getGoogleAuthUrl, setToken } from "@/lib/api";
+import { authApi, getGoogleAuthUrl, setToken, isAuthenticated } from "@/lib/api";
 
 const Shell = ({ title, sub, children, foot }: { title: string; sub: string; children: ReactNode; foot?: ReactNode }) => (
   <div className="min-h-screen relative flex items-center justify-center px-4 py-10">
@@ -36,6 +36,12 @@ export const Login = () => {
   const location = useLocation();
 
   useEffect(() => {
+    if (isAuthenticated()) {
+      navigate("/dashboard", { replace: true });
+    }
+  }, [navigate]);
+
+  useEffect(() => {
     if ((location.state as any)?.signedOut) {
       toast.success("Signed out successfully");
       // Clear the state so it doesn't show again on refresh
@@ -50,11 +56,11 @@ export const Login = () => {
       const res = await login(email, pw);
       if (res?.status === "2FA_REQUIRED") {
         toast.info("2FA code sent to your email");
-        navigate("/verify-2fa", { state: { email } });
+        navigate("/verify-2fa", { state: { email }, replace: true });
         return;
       }
       toast.success("Welcome back!");
-      navigate("/dashboard");
+      navigate("/dashboard", { replace: true });
     } catch (err: any) {
       toast.error(err.message || "Login failed");
     } finally {
@@ -128,13 +134,19 @@ export const Register = () => {
   const { register: registerUser } = useDemo();
   const navigate = useNavigate();
 
+  useEffect(() => {
+    if (isAuthenticated()) {
+      navigate("/dashboard", { replace: true });
+    }
+  }, [navigate]);
+
   const submit = async () => {
     if (!name || !email || pw.length < 6) return toast.error("Fill all fields (password 6+ chars)");
     setBusy(true);
     try {
       await registerUser(name, email, pw, referralCode.trim() || undefined);
       toast.success("Account created! Check your email for verification code.");
-      navigate("/verify-account", { state: { email } });
+      navigate("/verify-account", { state: { email }, replace: true });
     } catch (err: any) {
       toast.error(err.message || "Registration failed");
     } finally {

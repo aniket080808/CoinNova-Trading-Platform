@@ -120,6 +120,7 @@ export const useAuthStore = create<AuthState>()(
       },
 
       logout: () => {
+        authApi.logout().catch(() => {});
         clearToken();
         set({ user: null, mode: "demo", walletUSD: 0, holdings: [], transactions: [], watchlist: [], alerts: [], notifications: [], orders: [] });
       },

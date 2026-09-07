@@ -104,11 +104,12 @@ const FAQS = [
 
 export default function Landing() {
   const { data: coins } = useMarkets(1);
-  const { setMode } = useAuthStore();
+  const { user, setMode } = useAuthStore();
   const { currency, setCurrency, rate } = useCurrencyStore();
   const navigate = useNavigate();
   const top = (coins ?? []).slice(0, 6);
   const tickerCoins = (coins ?? []).slice(0, 12);
+  const loggedIn = !!user;
 
   const enterDemo = () => {
     setMode("demo");
@@ -139,15 +140,35 @@ export default function Landing() {
             >
               <span>{currency === "USD" ? "🇺🇸 USD" : "🇮🇳 INR"}</span>
             </button>
-            <Button asChild variant="ghost" className="hidden sm:inline-flex text-sm">
-              <Link to="/login">Login</Link>
-            </Button>
-            <Button asChild className="bg-gradient-neon text-background hover:opacity-90 shadow-glow-primary text-sm font-semibold">
-              <Link to="/register">Get Started <ArrowRight className="w-4 h-4 ml-1" /></Link>
-            </Button>
+            {loggedIn ? (
+              <Button asChild className="bg-gradient-neon text-background hover:opacity-95 shadow-glow-primary text-sm font-semibold">
+                <Link to="/dashboard">Go to Dashboard <ArrowRight className="w-4 h-4 ml-1.5" /></Link>
+              </Button>
+            ) : (
+              <>
+                <Button asChild variant="ghost" className="hidden sm:inline-flex text-sm">
+                  <Link to="/login">Login</Link>
+                </Button>
+                <Button asChild className="bg-gradient-neon text-background hover:opacity-90 shadow-glow-primary text-sm font-semibold">
+                  <Link to="/register">Get Started <ArrowRight className="w-4 h-4 ml-1" /></Link>
+                </Button>
+              </>
+            )}
           </div>
         </div>
       </header>
+
+      {/* Active Session Notification Bar */}
+      {loggedIn && (
+        <div className="bg-primary/10 border-b border-primary/25 px-4 py-2 text-xs text-center flex items-center justify-center gap-2 text-primary font-medium">
+          <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
+          <span>Active session: <strong>{user?.name || user?.email}</strong></span>
+          <span className="text-muted-foreground/60">•</span>
+          <Link to="/dashboard" className="underline font-bold hover:text-white transition">
+            Continue to Terminal →
+          </Link>
+        </div>
+      )}
 
       {/* Hero Section */}
       <section className="container pt-14 lg:pt-20 pb-12 relative">
@@ -169,12 +190,20 @@ export default function Landing() {
             </p>
 
             <div className="flex flex-wrap items-center gap-3 pt-2">
-              <Button onClick={enterDemo} size="lg" className="bg-gradient-neon text-background hover:opacity-95 shadow-glow-primary text-base h-12 px-6 font-semibold">
-                Start with {formatUSD(100000)} Demo <ArrowRight className="w-4 h-4 ml-2" />
-              </Button>
-              <Button asChild size="lg" variant="outline" className="h-12 px-6 glass border-border/60 font-medium">
-                <Link to="/login"><Play className="w-4 h-4 mr-2 text-primary" /> Login to Account</Link>
-              </Button>
+              {loggedIn ? (
+                <Button asChild size="lg" className="bg-gradient-neon text-background hover:opacity-95 shadow-glow-primary text-base h-12 px-7 font-semibold">
+                  <Link to="/dashboard">Open Trading Terminal <ArrowRight className="w-4 h-4 ml-2" /></Link>
+                </Button>
+              ) : (
+                <>
+                  <Button onClick={enterDemo} size="lg" className="bg-gradient-neon text-background hover:opacity-95 shadow-glow-primary text-base h-12 px-6 font-semibold">
+                    Start with {formatUSD(100000)} Demo <ArrowRight className="w-4 h-4 ml-2" />
+                  </Button>
+                  <Button asChild size="lg" variant="outline" className="h-12 px-6 glass border-border/60 font-medium">
+                    <Link to="/login"><Play className="w-4 h-4 mr-2 text-primary" /> Login to Account</Link>
+                  </Button>
+                </>
+              )}
             </div>
 
             {/* Value Props */}

@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, Response } from "express";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { z } from "zod";
@@ -16,6 +16,29 @@ import {
 import rateLimit from "express-rate-limit";
 
 const router = Router();
+
+export const SESSION_COOKIE = "coinnova_session";
+
+/** Sets a secure, HTTP-only cookie for session persistence (immune to XSS token theft) */
+export function setSessionCookie(res: Response, token: string) {
+  res.cookie(SESSION_COOKIE, token, {
+    httpOnly: true,
+    secure: true,
+    sameSite: "none",
+    maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+    path: "/",
+  });
+}
+
+/** Clears the session cookie on sign-out */
+export function clearSessionCookie(res: Response) {
+  res.clearCookie(SESSION_COOKIE, {
+    httpOnly: true,
+    secure: true,
+    sameSite: "none",
+    path: "/",
+  });
+}
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 min
@@ -179,6 +202,7 @@ router.get("/google/callback", async (req, res) => {
     }
 
     const token = signToken({ userId: user.id, email: user.email, role: user.role });
+    setSessionCookie(res, token);
     const userPayload = encodeURIComponent(JSON.stringify({
       id: user.id,
       name: user.name,
@@ -292,6 +316,7 @@ router.post("/register", emailOtpLimiter, validate(registerSchema), async (req, 
       email: user.email,
       role: user.role,
     });
+    setSessionCookie(res, token);
 
     res.status(201).json({
       token,
@@ -337,6 +362,7 @@ router.post("/login", authLimiter, validate(loginSchema), async (req, res) => {
         email: config.adminEmail,
         role: "admin",
       });
+      setSessionCookie(res, token);
 
       return res.json({
         token,
@@ -405,6 +431,7 @@ router.post("/login", authLimiter, validate(loginSchema), async (req, res) => {
       email: user.email,
       role: user.role,
     });
+    setSessionCookie(res, token);
 
     res.json({
       status: "SUCCESS",
@@ -491,6 +518,7 @@ router.post("/verify-otp", authLimiter, validate(verifyOtpSchema), async (req, r
       email: email,
       role: fullUser.role,
     });
+    setSessionCookie(res, token);
 
     res.json({ status: "SUCCESS", token, user: fullUser, message: "Code verified successfully" });
   } catch (err) {
@@ -672,6 +700,13 @@ router.post("/resend-otp", emailOtpLimiter, optionalAuth, async (req, res) => {
     console.error("Resend OTP error:", err);
     res.status(500).json({ error: "Internal server error" });
   }
+});
+
+// ─── POST /auth/logout ──────────────────────────────────
+
+router.post("/logout", (req, res) => {
+  clearSessionCookie(res);
+  res.json({ message: "Signed out successfully" });
 });
 
 export default router;

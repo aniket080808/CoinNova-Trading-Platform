@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Route, Routes, Navigate } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -67,6 +67,14 @@ function AuthInitializer() {
   return null;
 }
 
+/** GuestRoute prevents authenticated users from landing back on login/register */
+function GuestRoute({ children }: { children: React.ReactNode }) {
+  if (isAuthenticated()) {
+    return <Navigate to="/dashboard" replace />;
+  }
+  return <>{children}</>;
+}
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
@@ -77,12 +85,12 @@ const App = () => (
         <AuthInitializer />
         <Routes>
           <Route path="/" element={<Landing />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
+          <Route path="/login" element={<GuestRoute><Login /></GuestRoute>} />
+          <Route path="/register" element={<GuestRoute><Register /></GuestRoute>} />
           <Route path="/verify-account" element={<VerifyAccount />} />
           <Route path="/auth/google/success" element={<GoogleAuthCallback />} />
           <Route path="/verify-2fa" element={<Verify2FA />} />
-          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/forgot-password" element={<GuestRoute><ForgotPassword /></GuestRoute>} />
           <Route path="/verify-pin-otp" element={<AppLayout><VerifyPinOtp /></AppLayout>} />
           <Route path="/onboarding" element={<Onboarding />} />
           <Route path="/dashboard" element={<AppLayout><Dashboard /></AppLayout>} />

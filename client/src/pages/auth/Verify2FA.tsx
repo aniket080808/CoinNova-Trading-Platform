@@ -36,7 +36,7 @@ export default function Verify2FA() {
         await auth.syncAll();
       }
 
-      navigate("/dashboard");
+      navigate("/dashboard", { replace: true });
     } catch (err: any) {
       setError(err.message || "Invalid 2FA code. Please try again.");
     } finally {

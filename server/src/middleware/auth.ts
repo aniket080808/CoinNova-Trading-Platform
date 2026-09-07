@@ -25,16 +25,18 @@ export function signToken(payload: JwtPayload): string {
   });
 }
 
-/** Middleware — require a valid JWT in Authorization header */
+/** Middleware — require a valid JWT from HTTP-only cookie or Authorization header */
 export function requireAuth(req: Request, res: Response, next: NextFunction) {
+  const cookieToken = req.cookies?.coinnova_session;
   const header = req.headers.authorization;
-  if (!header?.startsWith("Bearer ")) {
-    res.status(401).json({ error: "Missing or invalid Authorization header" });
+  const token = cookieToken || (header?.startsWith("Bearer ") ? header.slice(7) : null);
+
+  if (!token) {
+    res.status(401).json({ error: "Missing or invalid session. Please sign in." });
     return;
   }
 
   try {
-    const token = header.slice(7);
     const decoded = jwt.verify(token, config.jwtSecret) as JwtPayload;
     if (decoded.isTemp) {
       res.status(403).json({ error: "Temporary token cannot access this resource. Please complete 2FA." });
@@ -43,20 +45,22 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
     req.user = decoded;
     next();
   } catch {
-    res.status(401).json({ error: "Invalid or expired token" });
+    res.status(401).json({ error: "Invalid or expired session. Please sign in again." });
   }
 }
 
-/** Middleware — parse JWT if present, but don't fail if missing */
+/** Middleware — parse JWT from cookie or header if present, but don't fail if missing */
 export function optionalAuth(req: Request, res: Response, next: NextFunction) {
+  const cookieToken = req.cookies?.coinnova_session;
   const header = req.headers.authorization;
-  if (!header?.startsWith("Bearer ")) {
+  const token = cookieToken || (header?.startsWith("Bearer ") ? header.slice(7) : null);
+
+  if (!token) {
     next();
     return;
   }
 
   try {
-    const token = header.slice(7);
     const decoded = jwt.verify(token, config.jwtSecret) as JwtPayload;
     req.user = decoded;
   } catch {

@@ -69,6 +69,7 @@ export async function apiFetch<T = any>(path: string, opts: ApiOptions = {}): Pr
   const res = await fetch(`${API_BASE}${path}`, {
     method,
     headers,
+    credentials: "include",
     body: body ? JSON.stringify(body) : undefined,
   });
 
@@ -160,6 +161,9 @@ export const authApi = {
 
   resendOtp: (email?: string) =>
     apiFetch<{ message: string; alreadyVerified?: boolean }>("/auth/resend-otp", { method: "POST", body: { email } }),
+
+  logout: () =>
+    apiFetch<{ message: string }>("/auth/logout", { method: "POST" }),
 };
 
 // ─── Wallet API ──────────────────────────────────────────

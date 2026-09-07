@@ -1,5 +1,6 @@
 import express from "express";
 import cors from "cors";
+import cookieParser from "cookie-parser";
 import rateLimit from "express-rate-limit";
 import { config } from "./config.js";
 
@@ -45,6 +46,9 @@ app.use(cors({
   },
   credentials: true,
 }));
+
+// Cookie Parser for secure HTTP-only session cookies
+app.use(cookieParser());
 
 // Parse JSON (skip for Stripe webhook which needs raw body)
 app.use((req, res, next) => {
