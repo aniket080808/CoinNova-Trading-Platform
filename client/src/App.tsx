@@ -54,7 +54,21 @@ function AuthInitializer() {
     
     // Connect to real-time prices for top coins
     const stop = connectPrices(["btc", "eth", "sol", "bnb", "doge", "xrp", "ada", "matic", "dot", "trx"]);
-    return stop;
+
+    // Guard against BFCache restoring old authenticated DOM when navigating via forward/back
+    const handlePageShow = (event: PageTransitionEvent) => {
+      if (event.persisted && !isAuthenticated() && sessionStorage.getItem("coinnova_demo_active") !== "true") {
+        if (window.location.pathname !== "/login" && window.location.pathname !== "/register") {
+          window.location.replace("/login");
+        }
+      }
+    };
+    window.addEventListener("pageshow", handlePageShow);
+
+    return () => {
+      stop();
+      window.removeEventListener("pageshow", handlePageShow);
+    };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Sync currency preference when user is loaded
@@ -67,10 +81,28 @@ function AuthInitializer() {
   return null;
 }
 
+/** HomeRoute automatically redirects authenticated users directly to /dashboard */
+function HomeRoute() {
+  if (isAuthenticated()) {
+    return <Navigate to="/dashboard" replace />;
+  }
+  return <Landing />;
+}
+
 /** GuestRoute prevents authenticated users from landing back on login/register */
 function GuestRoute({ children }: { children: React.ReactNode }) {
   if (isAuthenticated()) {
     return <Navigate to="/dashboard" replace />;
+  }
+  return <>{children}</>;
+}
+
+/** ProtectedRoute prevents unauthenticated users from accessing trading terminal */
+function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  const isAuth = isAuthenticated();
+  const isDemo = sessionStorage.getItem("coinnova_demo_active") === "true";
+  if (!isAuth && !isDemo) {
+    return <Navigate to="/login" replace />;
   }
   return <>{children}</>;
 }
@@ -84,29 +116,29 @@ const App = () => (
       <BrowserRouter>
         <AuthInitializer />
         <Routes>
-          <Route path="/" element={<Landing />} />
+          <Route path="/" element={<HomeRoute />} />
           <Route path="/login" element={<GuestRoute><Login /></GuestRoute>} />
           <Route path="/register" element={<GuestRoute><Register /></GuestRoute>} />
           <Route path="/verify-account" element={<VerifyAccount />} />
           <Route path="/auth/google/success" element={<GoogleAuthCallback />} />
           <Route path="/verify-2fa" element={<Verify2FA />} />
           <Route path="/forgot-password" element={<GuestRoute><ForgotPassword /></GuestRoute>} />
-          <Route path="/verify-pin-otp" element={<AppLayout><VerifyPinOtp /></AppLayout>} />
-          <Route path="/onboarding" element={<Onboarding />} />
-          <Route path="/dashboard" element={<AppLayout><Dashboard /></AppLayout>} />
-          <Route path="/market" element={<AppLayout><Market /></AppLayout>} />
-          <Route path="/coin/:id" element={<AppLayout><CoinDetail /></AppLayout>} />
-          <Route path="/portfolio" element={<AppLayout><Portfolio /></AppLayout>} />
-          <Route path="/wallet" element={<AppLayout><Wallet /></AppLayout>} />
-          <Route path="/transactions" element={<AppLayout><Transactions /></AppLayout>} />
-          <Route path="/transfer" element={<AppLayout><Transfer /></AppLayout>} />
-          <Route path="/watchlist" element={<AppLayout><Watchlist /></AppLayout>} />
-          <Route path="/alerts" element={<AppLayout><Alerts /></AppLayout>} />
-          <Route path="/replay" element={<AppLayout><Replay /></AppLayout>} />
-          <Route path="/journal" element={<AppLayout><Journal /></AppLayout>} />
-          <Route path="/trading-dna" element={<AppLayout><TradingDNA /></AppLayout>} />
-          <Route path="/admin" element={<AppLayout><Admin /></AppLayout>} />
-          <Route path="/settings" element={<AppLayout><Settings /></AppLayout>} />
+          <Route path="/verify-pin-otp" element={<ProtectedRoute><AppLayout><VerifyPinOtp /></AppLayout></ProtectedRoute>} />
+          <Route path="/onboarding" element={<ProtectedRoute><Onboarding /></ProtectedRoute>} />
+          <Route path="/dashboard" element={<ProtectedRoute><AppLayout><Dashboard /></AppLayout></ProtectedRoute>} />
+          <Route path="/market" element={<ProtectedRoute><AppLayout><Market /></AppLayout></ProtectedRoute>} />
+          <Route path="/coin/:id" element={<ProtectedRoute><AppLayout><CoinDetail /></AppLayout></ProtectedRoute>} />
+          <Route path="/portfolio" element={<ProtectedRoute><AppLayout><Portfolio /></AppLayout></ProtectedRoute>} />
+          <Route path="/wallet" element={<ProtectedRoute><AppLayout><Wallet /></AppLayout></ProtectedRoute>} />
+          <Route path="/transactions" element={<ProtectedRoute><AppLayout><Transactions /></AppLayout></ProtectedRoute>} />
+          <Route path="/transfer" element={<ProtectedRoute><AppLayout><Transfer /></AppLayout></ProtectedRoute>} />
+          <Route path="/watchlist" element={<ProtectedRoute><AppLayout><Watchlist /></AppLayout></ProtectedRoute>} />
+          <Route path="/alerts" element={<ProtectedRoute><AppLayout><Alerts /></AppLayout></ProtectedRoute>} />
+          <Route path="/replay" element={<ProtectedRoute><AppLayout><Replay /></AppLayout></ProtectedRoute>} />
+          <Route path="/journal" element={<ProtectedRoute><AppLayout><Journal /></AppLayout></ProtectedRoute>} />
+          <Route path="/trading-dna" element={<ProtectedRoute><AppLayout><TradingDNA /></AppLayout></ProtectedRoute>} />
+          <Route path="/admin" element={<ProtectedRoute><AppLayout><Admin /></AppLayout></ProtectedRoute>} />
+          <Route path="/settings" element={<ProtectedRoute><AppLayout><Settings /></AppLayout></ProtectedRoute>} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>

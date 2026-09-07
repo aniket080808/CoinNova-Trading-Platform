@@ -11,6 +11,7 @@ import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { ReactNode, useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { isAuthenticated } from "@/lib/api";
 import { ChatWidget } from "@/components/ai/ChatWidget";
 import { NotificationCenter } from "./NotificationCenter";
 import { MobileBottomNav } from "./MobileBottomNav";
@@ -54,8 +55,8 @@ export const AppLayout = ({ children }: { children: ReactNode }) => {
     storeLogout();
     localStorage.removeItem("coinnova-token");
     sessionStorage.clear();
-    navigate("/login", { replace: true, state: { signedOut: true } });
     setShowLogoutDialog(false);
+    window.location.replace("/login");
   };
 
   const initiateLogout = (title: string, description: string) => {
@@ -64,49 +65,46 @@ export const AppLayout = ({ children }: { children: ReactNode }) => {
   };
 
   const handleLogoClick = () => {
-    if (user) {
-      initiateLogout("Return to Home", "You are currently logged in. Would you like to sign out before returning to the landing page?");
+    if (user || isAuthenticated()) {
+      initiateLogout("Sign Out Confirmation", "You are currently logged in. Would you like to sign out of your CoinNova session?");
     } else {
-      navigate("/");
+      navigate("/login");
     }
   };
 
-  // Redirect if live and no user (Security Guard)
+  // Session guard: user must be authenticated or in explicit active demo
+  const isAuth = isAuthenticated() || !!user;
+  const isDemoActive = sessionStorage.getItem("coinnova_demo_active") === "true";
+
   useEffect(() => {
-    const checkAuth = () => {
-      if (mode === "live" && !user) {
-        navigate("/login", { replace: true });
-      }
-    };
+    if (!isAuth && !isDemoActive) {
+      navigate("/login", { replace: true });
+    }
+  }, [isAuth, isDemoActive, navigate]);
 
-    checkAuth();
+  // Intercept the browser back button on /dashboard to prompt sign out
+  useEffect(() => {
+    if (location.pathname === "/dashboard") {
+      window.history.pushState({ coinnovaDashboardTrap: true }, "", window.location.href);
 
-    // Listen for BFCache (back button) access
-    const handlePageShow = (event: PageTransitionEvent) => {
-      if (event.persisted && mode === "live" && !user) {
-        window.location.reload();
-      }
-    };
+      const handlePopState = () => {
+        // Re-push immediately to keep user on /dashboard and prevent unconfirmed navigation
+        window.history.pushState({ coinnovaDashboardTrap: true }, "", window.location.href);
 
-    // Back button confirmation
-    const handlePopState = (e: PopStateEvent) => {
-      if (user && !window.location.pathname.includes("/dashboard") && !window.location.pathname.includes("/auth")) {
-        initiateLogout("Leave Secure Area", "You are about to leave the secure trading area. Would you like to sign out?");
-        // Push state back so the user stays on the page while the dialog is open
-        window.history.pushState(null, "", location.pathname);
-      }
-    };
+        initiateLogout(
+          "Sign Out Confirmation",
+          "You pressed the browser's back button. Would you like to securely sign out of your CoinNova session?"
+        );
+      };
 
-    window.addEventListener("pageshow", handlePageShow);
-    window.addEventListener("popstate", handlePopState);
-    
-    return () => {
-      window.removeEventListener("pageshow", handlePageShow);
-      window.removeEventListener("popstate", handlePopState);
-    };
-  }, [mode, user, navigate, location.pathname]);
+      window.addEventListener("popstate", handlePopState);
+      return () => {
+        window.removeEventListener("popstate", handlePopState);
+      };
+    }
+  }, [location.pathname]);
 
-  if (mode === "live" && !user) return null;
+  if (!isAuth && !isDemoActive) return null;
 
   const isDemoUser = !user || user.email === "demo@coinnova.io";
 

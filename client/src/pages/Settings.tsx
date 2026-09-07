@@ -43,7 +43,7 @@ export default function Settings() {
   const handleLogout = () => {
     logout();
     toast.success("Logged out successfully");
-    navigate("/");
+    window.location.replace("/login");
   };
 
   const handleSaveProfile = async () => {
