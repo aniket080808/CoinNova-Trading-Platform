@@ -4,7 +4,7 @@ import crypto from "crypto";
 import { z } from "zod";
 import { eq, and, sql } from "drizzle-orm";
 import { db } from "../db/index.js";
-import { users, wallets, otpCodes, transactions, holdings, watchlist, alerts, aiChats, referrals } from "../db/schema.js";
+import { users, wallets, otpCodes, transactions, holdings, watchlist, alerts, aiChats, referrals, notifications } from "../db/schema.js";
 import { signToken, requireAuth, optionalAuth } from "../middleware/auth.js";
 import { validate } from "../middleware/validate.js";
 import { config } from "../config.js";
@@ -27,15 +27,26 @@ async function upsertGoogleUser(email: string, name: string, picture?: string) {
   const normalizedEmail = email.toLowerCase().trim();
   const normalizedName = name.trim() || normalizedEmail;
 
+  const raw = (normalizedName || normalizedEmail.split("@")[0] || "NOVA")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "")
+    .slice(0, 6);
+  const prefix = raw.length >= 3 ? raw : "NOVA";
+  const defaultReferralCode = `${prefix}-${crypto.randomInt(1000, 9999)}`;
+
   const [existing] = await db
-    .select({ id: users.id, email: users.email, name: users.name, role: users.role, emailVerified: users.emailVerified })
+    .select({ id: users.id, email: users.email, name: users.name, role: users.role, emailVerified: users.emailVerified, referralCode: users.referralCode })
     .from(users)
     .where(eq(users.email, normalizedEmail))
     .limit(1);
 
   if (existing) {
+    const updates: any = { name: normalizedName };
+    if (!existing.referralCode) {
+      updates.referralCode = defaultReferralCode;
+    }
     await db.update(users)
-      .set({ name: normalizedName })
+      .set(updates)
       .where(eq(users.id, existing.id));
 
     return { ...existing, isNew: false };
@@ -44,7 +55,7 @@ async function upsertGoogleUser(email: string, name: string, picture?: string) {
   const passwordHash = await bcrypt.hash(crypto.randomBytes(24).toString("hex"), 12);
   const [user] = await db
     .insert(users)
-    .values({ name: normalizedName, email: normalizedEmail, passwordHash, emailVerified: false })
+    .values({ name: normalizedName, email: normalizedEmail, passwordHash, emailVerified: false, referralCode: defaultReferralCode })
     .returning({ id: users.id, email: users.email, role: users.role, name: users.name, emailVerified: users.emailVerified });
 
   await db.insert(wallets).values({ userId: user.id, balanceUsd: "0" }).onConflictDoNothing();
@@ -192,16 +203,22 @@ router.post("/register", authLimiter, validate(registerSchema), async (req, res)
     // Hash password
     const passwordHash = await bcrypt.hash(password, 12);
 
-    // Generate unique referral code for this new user
-    const newReferralCode = `NOVA-${crypto.randomBytes(3).toString('hex').toUpperCase().slice(0, 5)}`;
+    // Generate unique referral code for this new user based on name or email
+    const rawPrefix = (name || email.split("@")[0] || "NOVA")
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, "")
+      .slice(0, 6);
+    const codePrefix = rawPrefix.length >= 3 ? rawPrefix : "NOVA";
+    const newReferralCode = `${codePrefix}-${crypto.randomInt(1000, 9999)}`;
 
     // Look up referrer if a referral code was provided
     let referrerId: string | null = null;
-    if (incomingCode) {
+    if (incomingCode && typeof incomingCode === "string") {
+      const cleanCode = incomingCode.trim().toUpperCase();
       const [referrer] = await db
         .select({ id: users.id })
         .from(users)
-        .where(eq(users.referralCode, incomingCode.trim().toUpperCase()))
+        .where(sql`UPPER(${users.referralCode}) = ${cleanCode}`)
         .limit(1);
       if (referrer) referrerId = referrer.id;
     }
@@ -228,7 +245,20 @@ router.post("/register", authLimiter, validate(registerSchema), async (req, res)
         referredUserId: user.id,
         status: "completed",
         rewardAmount: "25",
+        claimed: false,
       });
+
+      try {
+        await db.insert(notifications).values({
+          userId: referrerId,
+          type: "system",
+          title: "New Referral Joined! 🎉",
+          message: `${name || "A new trader"} just joined CoinNova using your referral code! You have a $25 reward waiting in your Referral Hub.`,
+          link: "/settings",
+        });
+      } catch (notifErr) {
+        console.error("Referral notification error:", notifErr);
+      }
     }
 
     // Generate and save OTP for email verification

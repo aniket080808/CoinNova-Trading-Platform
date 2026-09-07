@@ -1,7 +1,8 @@
 import { Router } from "express";
+import crypto from "crypto";
 import { eq, sql, and } from "drizzle-orm";
 import { db } from "../db/index.js";
-import { users, wallets, referrals, notifications } from "../db/schema.js";
+import { users, wallets, referrals, notifications, transactions } from "../db/schema.js";
 import { requireAuth } from "../middleware/auth.js";
 
 const router = Router();
@@ -11,6 +12,9 @@ router.get("/stats", requireAuth, async (req, res) => {
   try {
     const [user] = await db
       .select({
+        id: users.id,
+        name: users.name,
+        email: users.email,
         referralCode: users.referralCode,
       })
       .from(users)
@@ -19,6 +23,24 @@ router.get("/stats", requireAuth, async (req, res) => {
 
     if (!user) {
       return res.status(404).json({ error: "User not found" });
+    }
+
+    // If user has no referral code, generate one from name or email
+    let referralCode = user.referralCode;
+    if (!referralCode) {
+      const raw = (user.name || user.email.split("@")[0] || "NOVA")
+        .toUpperCase()
+        .replace(/[^A-Z0-9]/g, "")
+        .slice(0, 6);
+      const prefix = raw.length >= 3 ? raw : "NOVA";
+      let candidate = `${prefix}-${crypto.randomInt(1000, 9999)}`;
+      let exists = await db.select({ id: users.id }).from(users).where(eq(users.referralCode, candidate)).limit(1);
+      while (exists.length > 0) {
+        candidate = `${prefix}-${crypto.randomInt(1000, 9999)}`;
+        exists = await db.select({ id: users.id }).from(users).where(eq(users.referralCode, candidate)).limit(1);
+      }
+      await db.update(users).set({ referralCode: candidate }).where(eq(users.id, user.id));
+      referralCode = candidate;
     }
 
     // Get all referrals
@@ -42,21 +64,21 @@ router.get("/stats", requireAuth, async (req, res) => {
       .reduce((sum, r) => sum + Number(r.rewardAmount), 0);
 
     const pendingRewards = refs
-      .filter((r) => r.status === "completed" && !r.claimed)
+      .filter((r) => !r.claimed)
       .reduce((sum, r) => sum + Number(r.rewardAmount), 0);
 
     const totalReferred = refs.length;
 
     res.json({
-      referralCode: user.referralCode,
+      referralCode,
       totalReferred,
       totalEarned,
       pendingRewards,
       friends: refs.map((r) => ({
         id: r.id,
-        name: r.referredName,
-        email: r.referredEmail ? `${r.referredEmail[0]}***@***` : "—",
-        status: r.status,
+        name: r.referredName || "Trader",
+        email: r.referredEmail ? `${r.referredEmail.slice(0, 2)}***@***` : "—",
+        status: r.claimed ? "Claimed" : "Pending",
         reward: Number(r.rewardAmount),
         claimed: r.claimed,
         joinedAt: r.createdAt,
@@ -108,6 +130,17 @@ router.post("/claim", requireAuth, async (req, res) => {
           .set({ claimed: true })
           .where(eq(referrals.id, r.id));
       }
+
+      // Record deposit transaction
+      await trx.insert(transactions).values({
+        userId: req.user!.userId,
+        type: "deposit",
+        amount: String(totalReward),
+        total: String(totalReward),
+        status: "completed",
+        reason: "referral_bonus",
+        toDest: "Referral Rewards Claimed",
+      });
     });
 
     // Notify user

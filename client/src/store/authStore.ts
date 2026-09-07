@@ -27,7 +27,7 @@ interface AuthState {
   setLoading: (v: boolean) => void;
 
   login: (email: string, password: string) => Promise<any>;
-  register: (name: string, email: string, password: string) => Promise<void>;
+  register: (name: string, email: string, password: string, referralCode?: string) => Promise<void>;
   logout: () => void;
   fetchMe: () => Promise<void>;
 
@@ -106,10 +106,10 @@ export const useAuthStore = create<AuthState>()(
         }
       },
 
-      register: async (name, email, password) => {
+      register: async (name, email, password, referralCode) => {
         set({ loading: true });
         try {
-          const res = await authApi.register(name, email, password);
+          const res = await authApi.register(name, email, password, referralCode);
           setToken(res.token);
           set({ user: res.user, mode: "live", loading: false });
           await get().syncAll();

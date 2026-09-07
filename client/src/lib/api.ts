@@ -131,9 +131,9 @@ export interface AuthUser {
 }
 
 export const authApi = {
-  register: (name: string, email: string, password: string) =>
+  register: (name: string, email: string, password: string, referralCode?: string) =>
     apiFetch<{ token: string; user: AuthUser; message: string }>("/auth/register", {
-      method: "POST", body: { name, email, password }, skipAuth: true,
+      method: "POST", body: { name, email, password, referralCode: referralCode?.trim() || undefined }, skipAuth: true,
     }),
 
   login: (email: string, password: string) =>

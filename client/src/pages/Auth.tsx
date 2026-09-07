@@ -4,11 +4,11 @@ import { AuroraBg } from "@/components/glass/AuroraBg";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Link, useNavigate, useLocation } from "react-router-dom";
+import { Link, useNavigate, useLocation, useSearchParams } from "react-router-dom";
 import { ReactNode, useState, useEffect } from "react";
 import { useDemo } from "@/store/demo";
 import { toast } from "sonner";
-import { Eye, EyeOff, Mail, Lock, User, Shield, ArrowRight, KeyRound, Loader2, BadgeCheck } from "lucide-react";
+import { Eye, EyeOff, Mail, Lock, User, Shield, ArrowRight, KeyRound, Loader2, BadgeCheck, Gift } from "lucide-react";
 import { authApi, getGoogleAuthUrl, setToken } from "@/lib/api";
 
 const Shell = ({ title, sub, children, foot }: { title: string; sub: string; children: ReactNode; foot?: ReactNode }) => (
@@ -117,12 +117,14 @@ export const Login = () => {
 };
 
 export const Register = () => {
+  const [searchParams] = useSearchParams();
+  const refFromUrl = searchParams.get("ref") || "";
+
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [pw, setPw] = useState("");
+  const [referralCode, setReferralCode] = useState(refFromUrl);
   const [busy, setBusy] = useState(false);
-  const [step, setStep] = useState<"form" | "verify">("form");
-  const [code, setCode] = useState("");
   const { register: registerUser } = useDemo();
   const navigate = useNavigate();
 
@@ -130,7 +132,7 @@ export const Register = () => {
     if (!name || !email || pw.length < 6) return toast.error("Fill all fields (password 6+ chars)");
     setBusy(true);
     try {
-      await registerUser(name, email, pw);
+      await registerUser(name, email, pw, referralCode.trim() || undefined);
       toast.success("Account created! Check your email for verification code.");
       navigate("/verify-account", { state: { email } });
     } catch (err: any) {
@@ -180,6 +182,25 @@ export const Register = () => {
           <div className="relative">
             <Lock className="w-4 h-4 absolute left-3 top-3 text-muted-foreground" />
             <Input value={pw} onChange={(e) => setPw(e.target.value)} className="pl-9" type="password" placeholder="6+ characters" />
+          </div>
+        </div>
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <Label className="text-xs text-muted-foreground">Referral code (optional)</Label>
+            {referralCode.trim() && (
+              <span className="text-[11px] text-emerald-400 font-semibold flex items-center gap-1">
+                <BadgeCheck className="w-3.5 h-3.5" /> Code Applied ($25 Bonus)
+              </span>
+            )}
+          </div>
+          <div className="relative">
+            <Gift className="w-4 h-4 absolute left-3 top-3 text-muted-foreground" />
+            <Input
+              value={referralCode}
+              onChange={(e) => setReferralCode(e.target.value.toUpperCase())}
+              className="pl-9 font-mono uppercase tracking-wider text-sm"
+              placeholder="e.g. ANIKET-8291"
+            />
           </div>
         </div>
         <Button onClick={submit} disabled={busy} className="w-full bg-gradient-neon text-background shadow-glow-primary">
