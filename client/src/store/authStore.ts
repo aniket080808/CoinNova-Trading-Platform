@@ -130,7 +130,11 @@ export const useAuthStore = create<AuthState>()(
           const res = await authApi.me();
           set({ user: res.user, mode: "live" });
           await get().syncAll();
-        } catch {
+        } catch (err: any) {
+          // If the token is a temporary 2FA token (status 403), keep it intact so 2FA flow can proceed
+          if (err?.status === 403 || err?.message?.includes("Temporary token") || err?.message?.includes("2FA")) {
+            return;
+          }
           clearToken();
           set({ user: null, mode: "demo" });
         }

@@ -81,8 +81,11 @@ export function printStatement(transactions: ExportTransaction[], userName: stri
   body { font-family: 'Segoe UI', system-ui, sans-serif; padding: 40px; color: #1a1a2e; font-size: 12px; }
   h1 { font-size: 22px; margin-bottom: 4px; }
   .subtitle { color: #666; margin-bottom: 24px; }
-  .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #1a1a2e; padding-bottom: 16px; margin-bottom: 24px; }
-  .logo { font-size: 26px; font-weight: 800; background: linear-gradient(135deg, #00d4ff, #7c3aed); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+  .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #1a1a2e; padding-bottom: 16px; margin-bottom: 24px; }
+  .logo-row { display: flex; align-items: center; gap: 10px; }
+  .logo-img { width: 34px; height: 34px; border-radius: 8px; }
+  .logo { font-size: 24px; font-weight: 800; color: #1a1a2e; letter-spacing: -0.5px; }
+  .logo span { color: #00df8f; }
   .summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 24px; }
   .stat { border: 1px solid #e0e0e0; padding: 12px; border-radius: 8px; }
   .stat-label { font-size: 10px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; }
@@ -98,7 +101,23 @@ export function printStatement(transactions: ExportTransaction[], userName: stri
 </style>
 </head><body>
 <div class="header">
-  <div><div class="logo">CoinNova</div><div class="subtitle">Financial Statement</div></div>
+  <div class="logo-row">
+    <svg class="logo-img" viewBox="0 0 100 100" fill="none">
+      <defs>
+        <linearGradient id="exp-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="#00df8f" />
+          <stop offset="100%" stop-color="#3b82f6" />
+        </linearGradient>
+      </defs>
+      <rect width="100" height="100" rx="26" fill="url(#exp-grad)" />
+      <path d="M 52 22 A 28 28 0 1 0 78 50" stroke="#ffffff" stroke-width="7" stroke-linecap="round" fill="none" />
+      <circle cx="78" cy="50" r="5" fill="#ffffff" />
+      <path d="M 50 23 Q 50 43 77 50 Q 50 57 50 77 Q 50 57 23 50 Q 50 43 50 23 Z" fill="#ffffff" />
+      <circle cx="50" cy="50" r="4.5" fill="#040d1a" />
+      <circle cx="50" cy="50" r="2.2" fill="#00df8f" />
+    </svg>
+    <div><div class="logo">Coin<span>Nova</span></div><div class="subtitle" style="margin-bottom:0;">Financial Statement</div></div>
+  </div>
   <div style="text-align: right;">
     <div><strong>${userName}</strong></div>
     <div style="color: #666;">${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</div>
