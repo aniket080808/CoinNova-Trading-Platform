@@ -75,6 +75,21 @@ export async function apiFetch<T = any>(path: string, opts: ApiOptions = {}): Pr
 
   const data = await res.json().catch(() => ({}));
 
+  if (res.status === 403 && (data.isBlocked || data.error === "ACCOUNT_BLOCKED")) {
+    clearToken();
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(
+        new CustomEvent("coinnova:account_blocked", {
+          detail: {
+            reason: data.reason || data.message || "Your account has been suspended by an administrator.",
+            error: data.error,
+          },
+        })
+      );
+    }
+    throw new ApiError(data.message || data.error || "Account suspended", 403, data);
+  }
+
   if (res.status === 401) {
     // If this was an explicit auth endpoint (login, register, verify, etc.) or skipAuth is set:
     // This is an invalid credentials or validation error, NOT an expired session!
@@ -129,6 +144,9 @@ export interface AuthUser {
   hasPin?: boolean;
   twoFactorEnabled?: boolean;
   currencyPreference?: "USD" | "INR";
+  isBlocked?: boolean;
+  blockReason?: string | null;
+  blockedAt?: string | null;
 }
 
 export const authApi = {
@@ -393,6 +411,17 @@ export const adminApi = {
   kycPending: () => apiFetch<any[]>("/admin/kyc/pending"),
   kycApprove: (userId: string) => apiFetch(`/admin/kyc/${userId}/approve`, { method: "POST" }),
   kycReject: (userId: string, reason: string) => apiFetch(`/admin/kyc/${userId}/reject`, { method: "POST", body: { reason } }),
+  // Moderation / Account Blocking
+  blockUser: (id: string, reason: string) =>
+    apiFetch(`/admin/users/${id}/block`, { method: "POST", body: { reason } }),
+  unblockUser: (id: string) =>
+    apiFetch(`/admin/users/${id}/unblock`, { method: "POST" }),
+  // Verified KYC
+  kycVerified: () => apiFetch<any[]>("/admin/kyc/verified"),
+  // Full User Detail
+  userDetail: (id: string) => apiFetch<any>(`/admin/users/${id}/detail`),
+  // Referral Analytics
+  referralAnalytics: () => apiFetch<any>("/admin/referrals/analytics"),
 };
 
 // ─── Razorpay API ────────────────────────────────────────

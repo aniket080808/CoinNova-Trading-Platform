@@ -24,7 +24,7 @@ const ACTIVITIES: ActivityEvent[] = [
     icon: Gift,
     color: "text-amber-400",
     bgColor: "bg-amber-500/15 border-amber-500/30",
-    text: "User received $25.00 Referral Cash via NOVA-8921",
+    text: "New user received $10 Welcome Bonus via referral NOVA-8921",
     time: "24s ago"
   },
   {

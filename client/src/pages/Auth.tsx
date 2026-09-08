@@ -8,7 +8,7 @@ import { Link, useNavigate, useLocation, useSearchParams } from "react-router-do
 import { ReactNode, useState, useEffect } from "react";
 import { useDemo } from "@/store/demo";
 import { toast } from "sonner";
-import { Eye, EyeOff, Mail, Lock, User, Shield, ArrowRight, KeyRound, Loader2, BadgeCheck, Gift } from "lucide-react";
+import { Eye, EyeOff, Mail, Lock, User, Shield, ArrowRight, KeyRound, Loader2, BadgeCheck, Gift, ShieldAlert } from "lucide-react";
 import { authApi, getGoogleAuthUrl, setToken, isAuthenticated } from "@/lib/api";
 
 const Shell = ({ title, sub, children, foot }: { title: string; sub: string; children: ReactNode; foot?: ReactNode }) => (
@@ -31,6 +31,7 @@ export const Login = () => {
   const [pw, setPw] = useState("");
   const [show, setShow] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [suspensionError, setSuspensionError] = useState<string | null>(null);
   const { login } = useDemo();
   const navigate = useNavigate();
   const location = useLocation();
@@ -40,6 +41,14 @@ export const Login = () => {
       navigate("/dashboard", { replace: true });
     }
   }, [navigate]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get("error") === "account_blocked") {
+      const reason = params.get("reason") || "Account suspended by administrator.";
+      setSuspensionError(reason);
+    }
+  }, [location.search]);
 
   useEffect(() => {
     if ((location.state as any)?.signedOut) {
@@ -52,6 +61,7 @@ export const Login = () => {
   const submit = async () => {
     if (!email || !pw) return toast.error("Enter email and password");
     setBusy(true);
+    setSuspensionError(null);
     try {
       const res = await login(email, pw);
       if (res?.status === "2FA_REQUIRED") {
@@ -62,7 +72,13 @@ export const Login = () => {
       toast.success("Welcome back!");
       navigate("/dashboard", { replace: true });
     } catch (err: any) {
-      toast.error(err.message || "Login failed");
+      if (err?.status === 403 || err?.details?.isBlocked || err?.message?.includes("suspended") || err?.details?.error === "ACCOUNT_BLOCKED") {
+        const reason = err?.details?.reason || err?.message || "Your account has been suspended by the platform administrator.";
+        setSuspensionError(reason);
+        toast.error("Account Suspended: " + reason);
+      } else {
+        toast.error(err.message || "Login failed");
+      }
     } finally {
       setBusy(false);
     }
@@ -75,6 +91,27 @@ export const Login = () => {
       foot={<>Don't have an account? <Link to="/register" className="text-primary hover:underline">Create one</Link></>}
     >
       <div className="space-y-4">
+        {suspensionError && (
+          <div className="rounded-xl border border-red-500/40 bg-red-950/25 p-4 space-y-2 text-left animate-in fade-in">
+            <div className="flex items-center gap-2 text-red-400 font-semibold text-sm">
+              <ShieldAlert className="w-4 h-4 text-red-500 shrink-0" />
+              Account Suspended
+            </div>
+            <p className="text-xs text-zinc-300 leading-relaxed">
+              Your account access has been suspended by the administrator.
+            </p>
+            <div className="rounded-lg bg-black/40 border border-red-500/20 p-2.5 text-xs text-red-200 italic break-words">
+              "{suspensionError}"
+            </div>
+            <p className="text-[11px] text-zinc-400 pt-1">
+              To appeal this suspension, please email compliance at{" "}
+              <a href="mailto:support@coinnova.io?subject=Account%20Suspension%20Appeal" className="text-primary hover:underline font-medium">
+                support@coinnova.io
+              </a>
+              .
+            </p>
+          </div>
+        )}
         <Button
           type="button"
           variant="outline"

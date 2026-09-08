@@ -52,7 +52,12 @@ export async function ensureDatabaseSchema() {
       ALTER TABLE users ADD COLUMN IF NOT EXISTS referral_code VARCHAR(20) UNIQUE;
       ALTER TABLE users ADD COLUMN IF NOT EXISTS referred_by UUID REFERENCES users(id);
 
-      -- 4. Create referrals table if not exists
+      -- 4. Add Moderation / Account Block columns if missing
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS is_blocked BOOLEAN DEFAULT FALSE NOT NULL;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS block_reason TEXT;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS blocked_at TIMESTAMP;
+
+      -- 5. Create referrals table if not exists
       CREATE TABLE IF NOT EXISTS referrals (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         referrer_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,

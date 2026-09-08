@@ -45,8 +45,8 @@ const FAQS: FaqItem[] = [
   },
   {
     category: "rewards",
-    q: "How does the $25 Referral Cash Reward work?",
-    a: "Every registered user receives a unique invite code (e.g. NOVA-7492). When your friend signs up using your code, both of you qualify for reward bonuses that credit directly to your active CoinNova balance."
+    q: "How does the Referral Cash Reward work?",
+    a: "Every registered user receives a unique invite code (e.g. NOVA-7492). When your friend signs up using your code, you earn $25 and they automatically receive a $10 welcome bonus credited directly to their CoinNova wallet balance."
   },
   {
     category: "security",
@@ -374,7 +374,7 @@ export default function Landing() {
                 Earn $25 Cash Rewards per Friend
               </h3>
               <p className="text-sm text-muted-foreground leading-relaxed max-w-xl">
-                Share your personalized invite link directly to WhatsApp or Telegram. When friends sign up and practice trading, both of you unlock instant cash bonuses directly to your balance.
+                Share your personalized invite link directly to WhatsApp or Telegram. When friends sign up, you earn <strong className="text-emerald-400">$25</strong> and they get a <strong className="text-amber-400">$10 welcome bonus</strong> credited instantly to their wallet.
               </p>
             </div>
 

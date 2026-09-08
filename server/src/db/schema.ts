@@ -63,21 +63,21 @@ export const users = pgTable("users", {
   email: varchar("email", { length: 255 }).notNull().unique(),
   passwordHash: text("password_hash").notNull(),
   emailVerified: boolean("email_verified").default(false).notNull(),
-  
+
   // 2FA fields
   twoFactorEnabled: boolean("two_factor_enabled").default(false).notNull(),
   twoFactorSecret: text("two_factor_secret"),
-  
+
   // Transaction PIN fields
   transactionPin: text("transaction_pin"),
   transactionPinAttempts: numeric("transaction_pin_attempts").default("0").notNull(),
   pinLockedUntil: timestamp("pin_locked_until"),
-  
+
   // Preferences & Progress
   currencyPreference: varchar("currency_preference", { length: 10 }).default("USD").notNull(),
   xp: numeric("xp").default("0").notNull(),
   level: numeric("level").default("1").notNull(),
-  
+
   // KYC Verification
   kycStatus: kycStatusEnum("kyc_status").default("unverified").notNull(),
   kycLevel: integer("kyc_level").default(1).notNull(), // 1=Basic ($500/day), 2=Verified (Unlimited)
@@ -94,6 +94,11 @@ export const users = pgTable("users", {
   referralCode: varchar("referral_code", { length: 20 }).unique(),
   referredBy: uuid("referred_by"),
   
+  // Account Status / Moderation
+  isBlocked: boolean("is_blocked").default(false).notNull(),
+  blockReason: text("block_reason"),
+  blockedAt: timestamp("blocked_at"),
+
   role: roleEnum("role").default("user").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });

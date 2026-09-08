@@ -33,6 +33,7 @@ import NotFound from "./pages/NotFound.tsx";
 import { AppLayout } from "./components/layout/AppLayout";
 import { AuroraBg } from "./components/glass/AuroraBg";
 import { connectPrices } from "@/lib/binance";
+import { SuspensionModal } from "./components/auth/SuspensionModal";
 
 const queryClient = new QueryClient();
 
@@ -51,6 +52,13 @@ function AuthInitializer() {
     if (isAuthenticated()) {
       fetchMe().then(() => syncAll()).catch(() => {});
     }
+
+    // Active session block monitoring heartbeat (every 8 seconds)
+    const heartbeat = setInterval(() => {
+      if (isAuthenticated()) {
+        fetchMe().catch(() => {});
+      }
+    }, 8000);
     
     // Connect to real-time prices for top coins
     const stop = connectPrices(["btc", "eth", "sol", "bnb", "doge", "xrp", "ada", "matic", "dot", "trx"]);
@@ -67,6 +75,7 @@ function AuthInitializer() {
 
     return () => {
       stop();
+      clearInterval(heartbeat);
       window.removeEventListener("pageshow", handlePageShow);
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -112,6 +121,7 @@ const App = () => (
     <TooltipProvider>
       <Toaster />
       <Sonner theme="dark" toastOptions={{ classNames: { toast: "glass-strong border-border/50" } }} />
+      <SuspensionModal />
       <AuroraBg />
       <BrowserRouter>
         <AuthInitializer />

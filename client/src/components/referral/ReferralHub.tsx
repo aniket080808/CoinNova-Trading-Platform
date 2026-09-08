@@ -74,7 +74,7 @@ export function ReferralHub() {
     }
   };
 
-  const shareText = `Trade smarter on CoinNova! Sign up with my link to get a $25 bonus on your account.`;
+  const shareText = `Trade smarter on CoinNova! Sign up with my link and get a $10 welcome bonus instantly. I'll earn $25 too!`;
   const shareUrl = encodeURIComponent(referralLink);
   const encodedText = encodeURIComponent(shareText);
 
@@ -113,7 +113,7 @@ export function ReferralHub() {
               </span>
             </h3>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Share your link. When a friend joins CoinNova, you both earn rewards.
+              Share your link. When a friend joins, you earn $25 and they get a $10 welcome bonus.
             </p>
           </div>
         </div>

@@ -473,3 +473,130 @@ export async function sendEmailChangeEmail(to: string, otp: string) {
 
   return await sendMail(to, "Authorize Account Email Address Change", html, "email-change");
 }
+
+/** Account Suspended / Blocked by Administrator */
+export async function sendAccountBlockedEmail(to: string, userName: string, reason: string) {
+  const sanitizedReason = (reason || "Administrative review / Policy enforcement")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+
+  const html = renderCompliantEmailTemplate({
+    to,
+    badge: "Account Suspended",
+    badgeColor: "#ef4444",
+    title: "Your CoinNova account has been suspended",
+    heading: "Account Suspension Notice",
+    bodyContentHtml: `
+      <p style="margin-top: 0;">Hello <strong style="color: #ffffff;">${userName || "Trader"}</strong>,</p>
+      <p>We are writing to inform you that your CoinNova account access has been <strong>suspended</strong> by the platform administration.</p>
+      
+      <div style="background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 12px; padding: 20px; margin: 24px 0; text-align: left;">
+        <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #ef4444; margin-bottom: 8px;">
+          Official Reason for Suspension
+        </div>
+        <div style="font-size: 14px; color: #f4f4f5; line-height: 1.6; font-weight: 500; background: #0e0e14; border: 1px solid #272738; border-radius: 8px; padding: 14px 16px;">
+          "${sanitizedReason}"
+        </div>
+      </div>
+
+      <p style="font-weight: 600; color: #e4e4e7; margin-bottom: 8px;">What this means for your account:</p>
+      <ul style="padding-left: 20px; margin: 0 0 20px 0; line-height: 1.7; color: #a1a1aa; font-size: 13px;">
+        <li>All active login sessions have been immediately invalidated and terminated.</li>
+        <li>Access to trading terminals, buy/sell orders, and asset withdrawals has been frozen.</li>
+        <li>Your portfolio balance and transaction records remain securely preserved on our ledger.</li>
+      </ul>
+
+      <p style="font-size: 13px; color: #a1a1aa; line-height: 1.6;">
+        If you believe this administrative action was taken in error or if you wish to provide additional documentation to appeal this decision, please reach out directly to our compliance desk:
+      </p>
+      <div style="text-align: center; margin: 20px 0;">
+        <a href="mailto:support@coinnova.io?subject=Account%20Suspension%20Appeal%20-%20${encodeURIComponent(to)}" style="display: inline-block; padding: 12px 28px; background: #ef4444; color: #ffffff; text-decoration: none; border-radius: 8px; font-weight: 700; font-size: 13px; letter-spacing: 0.02em;">
+          Contact Compliance &amp; Support
+        </a>
+      </div>
+    `,
+    securityNotice: "This is an official administrative enforcement notice. CoinNova will never ask you for your account password or Transaction PIN.",
+    tag: "account-suspension",
+  });
+
+  return await sendMail(to, "Account Suspension Notice - Action Required", html, "account-suspension");
+}
+
+/** Account Re-activated / Unblocked by Administrator */
+export async function sendAccountUnblockedEmail(to: string, userName: string) {
+  const html = renderCompliantEmailTemplate({
+    to,
+    badge: "Account Restored",
+    badgeColor: "#22c55e",
+    title: "Your CoinNova account has been re-activated",
+    heading: "Account Access Restored",
+    bodyContentHtml: `
+      <p style="margin-top: 0;">Hello <strong style="color: #ffffff;">${userName || "Trader"}</strong>,</p>
+      <p>We are pleased to inform you that your CoinNova trading account has been <strong>re-activated</strong> by the platform administration.</p>
+      
+      <div class="action-box" style="margin: 20px 0; border-color: rgba(34, 197, 94, 0.3); background: rgba(34, 197, 94, 0.05);">
+        <p style="color: #22c55e; font-weight: 700; font-size: 16px; margin: 0 0 6px 0;">Full Account Access Restored</p>
+        <p class="expiry-note" style="margin: 0; color: #a1a1aa;">You may now log in to access your portfolio, trading features, and wallet balance.</p>
+      </div>
+
+      <p style="font-size: 13px; color: #a1a1aa; line-height: 1.6;">
+        You can sign back in using your registered credentials. We recommend reviewing your security settings and ensuring Two-Factor Authentication (2FA) is enabled.
+      </p>
+    `,
+    securityNotice: "If you did not expect this notification or notice unauthorized activity on your account, please secure your credentials immediately.",
+    tag: "account-restored",
+  });
+
+  return await sendMail(to, "Account Access Restored - Welcome Back", html, "account-restored");
+}
+
+/** Referral Welcome Bonus — Sent to NEW user who joined via a referral link */
+export async function sendReferralWelcomeBonusEmail(
+  to: string,
+  userName: string,
+  bonusAmount: number,
+  referrerName: string
+) {
+  const html = renderCompliantEmailTemplate({
+    to,
+    badge: "Welcome Bonus",
+    badgeColor: "#f59e0b",
+    title: `$${bonusAmount} Welcome Bonus credited to your CoinNova wallet`,
+    heading: "Welcome Bonus Credited! 🎁",
+    bodyContentHtml: `
+      <p style="margin-top: 0;">Hello <strong style="color: #ffffff;">${userName || "Trader"}</strong>,</p>
+      <p>Welcome to CoinNova! You've been referred by <strong style="color: #22c55e;">${referrerName || "a fellow trader"}</strong>, and as a thank-you for joining, we've automatically credited a welcome bonus to your trading wallet.</p>
+
+      <div style="background: rgba(245, 158, 11, 0.06); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 12px; padding: 24px; margin: 24px 0; text-align: center;">
+        <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #f59e0b; margin-bottom: 10px;">
+          Your Welcome Bonus
+        </div>
+        <div style="font-family: 'Courier New', Courier, monospace; font-size: 40px; font-weight: 800; color: #22c55e; margin: 0; letter-spacing: 0.04em;">
+          +$${bonusAmount.toFixed(2)}
+        </div>
+        <div style="font-size: 12px; color: #a1a1aa; margin-top: 8px;">
+          Credited instantly to your CoinNova wallet balance
+        </div>
+      </div>
+
+      <p style="font-weight: 600; color: #e4e4e7; margin-bottom: 8px;">What you can do with your bonus:</p>
+      <ul style="padding-left: 20px; margin: 0 0 20px 0; line-height: 1.8; color: #a1a1aa; font-size: 13px;">
+        <li>Practice trading with <strong style="color: #d4d4d8;">10,000+ real-time crypto pairs</strong></li>
+        <li>Use your bonus balance alongside your practice capital</li>
+        <li>Share your own referral code and earn <strong style="color: #22c55e;">$25 per friend</strong> who joins</li>
+      </ul>
+
+      <div style="text-align: center; margin: 24px 0;">
+        <a href="https://coinnova-trading.pages.dev/dashboard" style="display: inline-block; padding: 14px 32px; background: linear-gradient(135deg, #22c55e, #16a34a); color: #ffffff; text-decoration: none; border-radius: 10px; font-weight: 700; font-size: 14px; letter-spacing: 0.02em;">
+          Start Trading Now →
+        </a>
+      </div>
+    `,
+    securityNotice: "This bonus was credited automatically as part of our referral program. No action is required to activate it.",
+    tag: "referral-welcome-bonus",
+  });
+
+  return await sendMail(to, `$${bonusAmount} Welcome Bonus Credited - Start Trading!`, html, "referral-welcome-bonus");
+}
+

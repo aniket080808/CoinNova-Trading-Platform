@@ -12,6 +12,7 @@ import {
   generateOTP,
   sendVerificationEmail,
   sendPasswordResetEmail,
+  sendReferralWelcomeBonusEmail,
 } from "../services/email.js";
 import rateLimit from "express-rate-limit";
 
@@ -69,7 +70,16 @@ async function upsertGoogleUser(email: string, name: string, picture?: string) {
   const defaultReferralCode = `${prefix}-${crypto.randomInt(1000, 9999)}`;
 
   const [existing] = await db
-    .select({ id: users.id, email: users.email, name: users.name, role: users.role, emailVerified: users.emailVerified, referralCode: users.referralCode })
+    .select({
+      id: users.id,
+      email: users.email,
+      name: users.name,
+      role: users.role,
+      emailVerified: users.emailVerified,
+      referralCode: users.referralCode,
+      isBlocked: users.isBlocked,
+      blockReason: users.blockReason,
+    })
     .from(users)
     .where(eq(users.email, normalizedEmail))
     .limit(1);
@@ -90,7 +100,15 @@ async function upsertGoogleUser(email: string, name: string, picture?: string) {
   const [user] = await db
     .insert(users)
     .values({ name: normalizedName, email: normalizedEmail, passwordHash, emailVerified: false, referralCode: defaultReferralCode })
-    .returning({ id: users.id, email: users.email, role: users.role, name: users.name, emailVerified: users.emailVerified });
+    .returning({
+      id: users.id,
+      email: users.email,
+      role: users.role,
+      name: users.name,
+      emailVerified: users.emailVerified,
+      isBlocked: users.isBlocked,
+      blockReason: users.blockReason,
+    });
 
   await db.insert(wallets).values({ userId: user.id, balanceUsd: "0" }).onConflictDoNothing();
 
@@ -183,6 +201,11 @@ router.get("/google/callback", async (req, res) => {
 
     const user = await upsertGoogleUser(profile.email, profile.name || profile.given_name || profile.email, profile.picture);
     
+    if (user.isBlocked) {
+      const reasonParam = encodeURIComponent(user.blockReason || "Account suspended by administrator.");
+      return res.redirect(`${config.google.frontendUrl}/login?error=account_blocked&reason=${reasonParam}`);
+    }
+
     // If user is unverified, generate and dispatch verification OTP
     const needsVerification = !user.emailVerified;
     if (needsVerification) {
@@ -270,10 +293,14 @@ router.post("/register", emailOtpLimiter, validate(registerSchema), async (req, 
       })
       .returning({ id: users.id, email: users.email, role: users.role });
 
-    // Create wallet with $0 starting balance
-    await db.insert(wallets).values({ userId: user.id, balanceUsd: "0" });
+    // Welcome bonus amount for referred users
+    const WELCOME_BONUS = 10;
 
-    // If referred, create a referral tracking record
+    // Create wallet — if referred, start with $10 welcome bonus; otherwise $0
+    const startingBalance = referrerId ? String(WELCOME_BONUS) : "0";
+    await db.insert(wallets).values({ userId: user.id, balanceUsd: startingBalance });
+
+    // If referred, create a referral tracking record + credit welcome bonus
     if (referrerId) {
       await db.insert(referrals).values({
         referrerId,
@@ -283,6 +310,35 @@ router.post("/register", emailOtpLimiter, validate(registerSchema), async (req, 
         claimed: false,
       });
 
+      // Record the $10 welcome bonus as a deposit transaction for the new user
+      try {
+        await db.insert(transactions).values({
+          userId: user.id,
+          type: "deposit",
+          amount: String(WELCOME_BONUS),
+          total: String(WELCOME_BONUS),
+          status: "completed",
+          reason: "referral_welcome_bonus",
+          toDest: "Referral Welcome Bonus",
+        });
+      } catch (txnErr) {
+        console.error("Welcome bonus transaction record error:", txnErr);
+      }
+
+      // Notify the NEW user about their welcome bonus
+      try {
+        await db.insert(notifications).values({
+          userId: user.id,
+          type: "deposit",
+          title: "Welcome Bonus Credited! 🎁",
+          message: `$${WELCOME_BONUS}.00 has been added to your wallet as a welcome bonus for joining via referral. Start trading now!`,
+          link: "/wallet",
+        });
+      } catch (notifErr) {
+        console.error("Welcome bonus notification error:", notifErr);
+      }
+
+      // Notify the REFERRER about the new referral
       try {
         await db.insert(notifications).values({
           userId: referrerId,
@@ -294,6 +350,26 @@ router.post("/register", emailOtpLimiter, validate(registerSchema), async (req, 
       } catch (notifErr) {
         console.error("Referral notification error:", notifErr);
       }
+
+      // Send welcome bonus email to the new user (async, non-blocking)
+      (async () => {
+        try {
+          // Look up referrer name for personalized email
+          const [referrer] = await db
+            .select({ name: users.name })
+            .from(users)
+            .where(eq(users.id, referrerId!))
+            .limit(1);
+          await sendReferralWelcomeBonusEmail(
+            email,
+            name || "Trader",
+            WELCOME_BONUS,
+            referrer?.name || "a fellow trader"
+          );
+        } catch (emailErr) {
+          console.error("Welcome bonus email error:", emailErr);
+        }
+      })();
     }
 
     // Generate and save OTP for email verification
@@ -400,6 +476,18 @@ router.post("/login", authLimiter, validate(loginSchema), async (req, res) => {
     const valid = await bcrypt.compare(password, user.passwordHash);
     if (!valid) {
       res.status(401).json({ error: "Invalid email or password" });
+      return;
+    }
+
+    if (user.isBlocked) {
+      res.status(403).json({
+        error: "ACCOUNT_BLOCKED",
+        message: user.blockReason
+          ? `Your account has been suspended: ${user.blockReason}`
+          : "Your account has been suspended by the platform administrator.",
+        reason: user.blockReason || "Account suspended by administrator.",
+        isBlocked: true,
+      });
       return;
     }
 
@@ -638,6 +726,8 @@ router.get("/me", requireAuth, async (req, res) => {
         twoFactorEnabled: users.twoFactorEnabled,
         hasPin: sql<boolean>`${users.transactionPin} IS NOT NULL`,
         createdAt: users.createdAt,
+        isBlocked: users.isBlocked,
+        blockReason: users.blockReason,
       })
       .from(users)
       .where(eq(users.id, req.user!.userId))
@@ -645,6 +735,18 @@ router.get("/me", requireAuth, async (req, res) => {
 
     if (!user) {
       res.status(404).json({ error: "User not found" });
+      return;
+    }
+
+    if (user.isBlocked) {
+      res.status(403).json({
+        error: "ACCOUNT_BLOCKED",
+        message: user.blockReason
+          ? `Your account has been suspended: ${user.blockReason}`
+          : "Your account has been suspended by the platform administrator.",
+        reason: user.blockReason || "Account suspended by administrator.",
+        isBlocked: true,
+      });
       return;
     }
 
